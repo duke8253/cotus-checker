@@ -195,7 +195,7 @@ def report_with_email(email_to, edd='', state=''):
     if edd:
       email_body += 'New EDD: {0}\n'.format(edd)
     if state:
-      email_body += 'New State: {0}\n'.format(state)
+      email_body += 'New State: {0}\n'.format(state.title())
 
     email_msg = MIMEText(email_body)
     email_msg['Subject'] = '[COTUS CHECKER] Order Status Changed'
@@ -241,8 +241,11 @@ def main():
   else:
     if args.vin:
       data = get_data(args, 'vin', url=COTUS_URL1)
-    else:
+    elif args.order_number and args.dealer_code and args.last_name:
       data = get_data(args, url=COTUS_URL1)
+    else:
+      print('Invalid input!')
+      exit(1)
     err, msg = format_order_info(data, args.vehicle_summary, args.send_email)
     if err:
       if args.vin:
