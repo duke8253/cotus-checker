@@ -30,8 +30,11 @@ CYAN   = '\033[1;36m'
 WHITE  = '\033[1;37m'
 RESET  = '\033[0;0m'
 
-COTUS_URL1 = 'http://wwwqa.cotus.ford.com'
-COTUS_URL2 = 'http://www.cotus.ford.com'
+COTUS_URL = [
+  'http://wwwqa.cotus.ford.com',
+  'http://www.cotus.ford.com',
+  'http://www.ordertracking.ford.com'
+]
 
 order_states = {
   0: 'In Order Processing:',
@@ -63,9 +66,10 @@ def setup_vin(args, g):
   g.doc.set_input('orderTrackingInputType', 'vin')
   g.doc.set_input('vin', args.vin)
 
-def get_data(args, which_one='', url=COTUS_URL1):
+def get_data(args, which_one='', url=COTUS_URL[0]):
   g = Grab()
   g.go(url)
+  g.doc.set_input('freshLoaded', 'true')
   try:
     if which_one == 'vin':
       setup_vin(args, g)
@@ -81,6 +85,7 @@ def get_order_info(data):
       'vehicle_name': re.search(u'class="vehicleName">(.*?)</span>', data).group(1).strip(),
       'order_date': re.search(u'class="orderDate">(.*?)</span>', data).group(1).strip(),
       'order_num': re.search(u'class="orderNumber">(.*?)</span>', data).group(1).strip(),
+      'dealer_code': re.search(u'"dealerInfo": { "dealerCode":(.*?)}', data).group(1).replace('"', '').strip(),
       'order_vin': re.search(u'class="vin">(.*?)</span>', data).group(1).strip(),
       'order_edd': re.search(u'id="hidden-estimated-delivery-date" data-part="(.*?)"', data).group(1).strip(),
       'current_state': re.search(u'"selectedStepName":(.*?)"surveyOn"', data).group(1).replace(',', '').replace('"', '').strip().title()
@@ -104,7 +109,7 @@ def get_order_info(data):
   except AttributeError:
     return -1
 
-def format_order_info(data, vehicle_summary=False, send_email='', url=COTUS_URL1):
+def format_order_info(data, vehicle_summary=False, send_email='', url=COTUS_URL[0]):
   try:
     error_msg = re.search(u'class="top-level-error enabled">(.*?)</p>', data).group(1).strip()
     return 1, error_msg
@@ -121,6 +126,7 @@ def format_order_info(data, vehicle_summary=False, send_email='', url=COTUS_URL1
     order_str += '  {0: <21}{1}{2}{3}\n'.format('Vehicle Name:', GREEN, order_info['vehicle_name'], RESET)
     order_str += '  {0: <21}{1}\n'.format('Ordered On:', order_info['order_date'])
     order_str += '  {0: <21}{1}\n'.format('Order Number:', order_info['order_num'])
+    order_str += '  {0: <21}{1}\n'.format('Dealer Code:', order_info['dealer_code'])
     order_str += '  {0: <21}{1}\n'.format('VIN:', order_info['order_vin'])
     order_str += '  {0: <21}{1}{2}{3}\n'.format('Estimated Delivery:', CYAN, 'N/A' if not order_info['order_edd'] else order_info['order_edd'], RESET)
     order_str += '  {0: <21}{1}{2}{3}\n'.format('Current State:', RED, order_info['current_state'], RESET)
@@ -221,27 +227,26 @@ def main():
       vins = get_vins(args.file)
       for v in vins:
         args.vin = v
-        data = get_data(args, 'vin', url=COTUS_URL1)
-        err, msg = format_order_info(data, args.vehicle_summary, args.send_email, COTUS_URL1)
-        if err:
-          data = get_data(args, 'vin', url=COTUS_URL2)
-          err, msg = format_order_info(data, args.vehicle_summary, args.send_email, COTUS_URL2)
+        for i in range(len(COTUS_URL)):
+          url = COTUS_URL[i]
+          data = get_data(args, 'vin', url=url)
+          err, msg = format_order_info(data, args.vehicle_summary, args.send_email, url)
+          if not err:
+            break
         print(msg)
   else:
-    if args.vin:
-      data = get_data(args, 'vin', url=COTUS_URL1)
-    elif args.order_number and args.dealer_code and args.last_name:
-      data = get_data(args, url=COTUS_URL1)
-    else:
-      print('Invalid input!')
-      exit(1)
-    err, msg = format_order_info(data, args.vehicle_summary, args.send_email, COTUS_URL1)
-    if err:
+    for i in range(len(COTUS_URL)):
+      url = COTUS_URL[i]
       if args.vin:
-        data = get_data(args, 'vin', url=COTUS_URL2)
+        data = get_data(args, 'vin', url=url)
+      elif args.order_number and args.dealer_code and args.last_name:
+        data = get_data(args, url=url)
       else:
-        data = get_data(args, url=COTUS_URL2)
-      err, msg = format_order_info(data, args.vehicle_summary, args.send_email, COTUS_URL2)
+        print('Invalid input!')
+        exit(1)
+      err, msg = format_order_info(data, args.vehicle_summary, args.send_email, url)
+      if not err:
+        break
     print(msg)
 
 if __name__ == '__main__':
