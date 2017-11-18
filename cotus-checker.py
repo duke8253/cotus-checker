@@ -15,7 +15,6 @@
 # limitations under the License.
 
 from grab import Grab
-from datetime import datetime
 from email.mime.text import MIMEText
 import re
 import argparse
@@ -40,14 +39,6 @@ order_states = {
   2: 'Awaiting Shipment:',
   3: 'In Transit:',
   4: 'Delivered:'
-}
-
-state_order = {
-  'in order processing': 0,
-  'in production': 1,
-  'awaiting shipment': 2,
-  'in transit': 3,
-  'delivered': 4
 }
 
 # Set your own gmail address and password
@@ -92,7 +83,7 @@ def get_order_info(data):
       'order_num': re.search(u'class="orderNumber">(.*?)</span>', data).group(1).strip(),
       'order_vin': re.search(u'class="vin">(.*?)</span>', data).group(1).strip(),
       'order_edd': re.search(u'id="hidden-estimated-delivery-date" data-part="(.*?)"', data).group(1).strip(),
-      'current_state': re.search(u'"selectedStepName":(.*?)"surveyOn"', data).group(1).replace(',', '').replace('"', '').strip()
+      'current_state': re.search(u'"selectedStepName":(.*?)"surveyOn"', data).group(1).replace(',', '').replace('"', '').strip().title()
     }
 
     state_dates = [d.replace('.', '/').strip() for d in re.findall(u'Completed On : </span>(.*?)</span>', data)]
@@ -156,28 +147,21 @@ def check_state(data, file_name, send_email):
   cur_edd = data[0]
   cur_state = data[1].lower()
   cur_str = '{0}\n{1}\n'.format(cur_edd, cur_state)
-
-  if cur_edd:
-    cur_edd_date = datetime.strptime(cur_edd, '%m/%d/%Y')
-  else:
-    cur_edd_date = datetime.strptime('01/01/1900', '%m/%d/%Y')
+  first_time = True
 
   pre_data = []
   if os.path.isfile(file_name):
+    first_time = False
     pre_data = open(file_name, 'r').readlines()
     os.remove(file_name)
 
   if pre_data:
     pre_edd = pre_data[0].replace('\n', '')
     pre_state = pre_data[1].replace('\n', '')
-    if pre_edd:
-      pre_edd_date = datetime.strptime(pre_edd, '%m/%d/%Y')
-    else:
-      pre_edd_date = datetime.strptime('01/01/1900', '%m/%d/%Y')
 
-    if cur_edd_date > pre_edd_date:
+    if cur_edd != pre_edd:
       edd_changed = True
-    if state_order[cur_state] > state_order[pre_state]:
+    if cur_state != pre_state:
       state_changed = True
   else:
     if cur_edd:
@@ -186,9 +170,9 @@ def check_state(data, file_name, send_email):
 
   open(file_name, 'w').write(cur_str)
   if edd_changed or state_changed:
-    report_with_email(send_email, cur_edd if edd_changed else '', cur_state if state_changed else '')
+    report_with_email(send_email, cur_edd if edd_changed else '', cur_state if state_changed else '', first_time)
 
-def report_with_email(email_to, edd='', state=''):
+def report_with_email(email_to, edd='', state='', first_time=False):
   if not gmail_user or not gmail_pswd:
     print(YELLOW + 'Must set gmail username and password to send email.\n' + RESET)
   else:
@@ -200,7 +184,10 @@ def report_with_email(email_to, edd='', state=''):
       email_body += 'New State: {0}\n'.format(state.title())
 
     email_msg = MIMEText(email_body)
-    email_msg['Subject'] = '[COTUS CHECKER] Order Status Changed'
+    if first_time:
+      email_msg['Subject'] = '[COTUS CHECKER] Order Status Changed (Initial Check)'
+    else:
+      email_msg['Subject'] = '[COTUS CHECKER] Order Status Changed'
     email_msg['From'] = gmail_user
     email_msg['To'] = email_to
 
