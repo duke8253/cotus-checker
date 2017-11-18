@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 
 # Copyright 2017 DukeGaGa
-
+#
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
 # You may obtain a copy of the License at
-
+#
 #     http://www.apache.org/licenses/LICENSE-2.0
-
+#
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -19,7 +19,7 @@ import re
 import argparse
 import os
 
-RED  = '\033[1;31m'
+RED    = '\033[1;31m'
 GREEN  = '\033[1;32m'
 YELLOW = '\033[1;33m'
 BLUE   = '\033[1;34m'
@@ -27,6 +27,9 @@ PURPLE = '\033[1;35m'
 CYAN   = '\033[1;36m'
 WHITE  = '\033[1;37m'
 RESET  = '\033[0;0m'
+
+COTUS_URL1 = 'http://wwwqa.cotus.ford.com'
+COTUS_URL2 = 'http://www.cotus.ford.com'
 
 order_states = {
   0: 'In Order Processing:',
@@ -54,9 +57,9 @@ def setup_vin(args, g):
   g.doc.set_input('orderTrackingInputType', 'vin')
   g.doc.set_input('vin', args.vin)
 
-def get_data(args, which_one=''):
+def get_data(args, which_one='', url=COTUS_URL1):
   g = Grab()
-  g.go('http://wwwqa.cotus.ford.com')
+  g.go(url)
   if which_one == 'vin':
     setup_vin(args, g)
   else:
@@ -89,10 +92,11 @@ def get_order_info(data):
 
   return order_info
 
-def print_order_info(data, vehicle_summary=False):
+def format_order_info(data, vehicle_summary=False):
   try:
     error_msg = re.search(u'class="top-level-error enabled">(.*?)</p>', data).group(1).strip()
-    print(error_msg)
+    return 1, error_msg
+
   except AttributeError:
     order_info = get_order_info(data)
 
@@ -110,13 +114,13 @@ def print_order_info(data, vehicle_summary=False):
       except IndexError:
         order_str += '  {0: <21}{1}\n'.format(order_states[i], 'N/A')
 
-    print(order_str)
-
     if vehicle_summary:
-      print('  Vehicle Summary:')
+      order_str += '\n  Vehicle Summary:\n'
       for each in order_info['vehicle_summary']:
-        print('    ' + each)
-      print('\n')
+        order_str += '    {0}\n'.format(each)
+      order_str += '\n'
+
+    return 0, order_str
 
 def main():
   parser = argparse.ArgumentParser()
@@ -136,14 +140,25 @@ def main():
       vins = get_vins(args.file)
       for v in vins:
         args.vin = v
-        data = get_data(args, 'vin')
-        print_order_info(data, args.vehicle_summary)
+        data = get_data(args, 'vin', url=COTUS_URL1)
+        err, msg = format_order_info(data, args.vehicle_summary)
+        if err:
+          data = get_data(args, 'vin', url=COTUS_URL2)
+          err, msg = format_order_info(data, args.vehicle_summary)
+        print(msg)
   else:
     if args.vin:
-      data = get_data(args, 'vin')
+      data = get_data(args, 'vin', url=COTUS_URL1)
     else:
-      data = get_data(args)
-    print_order_info(data, args.vehicle_summary)
+      data = get_data(args, url=COTUS_URL1)
+    err, msg = format_order_info(data, args.vehicle_summary)
+    if err:
+      if args.vin:
+        data = get_data(args, 'vin', url=COTUS_URL2)
+      else:
+        data = get_data(args, url=COTUS_URL2)
+      err, msg = format_order_info(data, args.vehicle_summary)
+      print(msg)
 
 if __name__ == '__main__':
   main()
