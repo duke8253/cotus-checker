@@ -50,7 +50,7 @@ state_order = {
   'delivered': 4
 }
 
-# Set your own email address and password
+# Set your own gmail address and password
 gmail_user = ''
 gmail_pswd = ''
 
@@ -113,7 +113,7 @@ def get_order_info(data):
   except AttributeError:
     return -1
 
-def format_order_info(data, vehicle_summary=False, send_email=''):
+def format_order_info(data, vehicle_summary=False, send_email='', url=COTUS_URL1):
   try:
     error_msg = re.search(u'class="top-level-error enabled">(.*?)</p>', data).group(1).strip()
     return 1, error_msg
@@ -139,6 +139,8 @@ def format_order_info(data, vehicle_summary=False, send_email=''):
         order_str += '  {0: <21}{1}\n'.format(order_states[i], order_info['state_dates'][i])
       except IndexError:
         order_str += '  {0: <21}{1}\n'.format(order_states[i], 'N/A')
+
+    order_str += '  {0: <21}{1}{2}{3}\n'.format('Source:', YELLOW, url, RESET)
 
     if vehicle_summary:
       order_str += '\n  Vehicle Summary:\n'
@@ -233,10 +235,10 @@ def main():
       for v in vins:
         args.vin = v
         data = get_data(args, 'vin', url=COTUS_URL1)
-        err, msg = format_order_info(data, args.vehicle_summary, args.send_email)
+        err, msg = format_order_info(data, args.vehicle_summary, args.send_email, COTUS_URL1)
         if err:
           data = get_data(args, 'vin', url=COTUS_URL2)
-          err, msg = format_order_info(data, args.vehicle_summary, args.send_email)
+          err, msg = format_order_info(data, args.vehicle_summary, args.send_email, COTUS_URL2)
         print(msg)
   else:
     if args.vin:
@@ -246,14 +248,14 @@ def main():
     else:
       print('Invalid input!')
       exit(1)
-    err, msg = format_order_info(data, args.vehicle_summary, args.send_email)
+    err, msg = format_order_info(data, args.vehicle_summary, args.send_email, COTUS_URL1)
     if err:
       if args.vin:
         data = get_data(args, 'vin', url=COTUS_URL2)
       else:
         data = get_data(args, url=COTUS_URL2)
-      err, msg = format_order_info(data, args.vehicle_summary, args.send_email)
-      print(msg)
+      err, msg = format_order_info(data, args.vehicle_summary, args.send_email, COTUS_URL2)
+    print(msg)
 
 if __name__ == '__main__':
   main()
