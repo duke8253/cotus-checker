@@ -15,9 +15,12 @@
 # limitations under the License.
 
 from grab import Grab
+from datetime import datetime
+from email.mime.text import MIMEText
 import re
 import argparse
 import os
+import smtplib
 
 RED    = '\033[1;31m'
 GREEN  = '\033[1;32m'
@@ -38,6 +41,18 @@ order_states = {
   3: 'In Transit:',
   4: 'Delivered:'
 }
+
+state_order = {
+  'in order processing': 0,
+  'in production': 1,
+  'awaiting shipment': 2,
+  'in transit': 3,
+  'delivered': 4
+}
+
+# Set your own email address and password
+gmail_user = ''
+gmail_pswd = ''
 
 def get_vins(file_name):
   with open(file_name, 'r') as in_file:
@@ -60,45 +75,56 @@ def setup_vin(args, g):
 def get_data(args, which_one='', url=COTUS_URL1):
   g = Grab()
   g.go(url)
-  if which_one == 'vin':
-    setup_vin(args, g)
-  else:
-    setup_order_num(args, g)
-  return g.doc.submit().unicode_body().replace('\n', '').replace('\r', '')
+  try:
+    if which_one == 'vin':
+      setup_vin(args, g)
+    else:
+      setup_order_num(args, g)
+    return g.doc.submit().unicode_body().replace('\n', '').replace('\r', '')
+  except:
+    return ''
 
 def get_order_info(data):
-  order_info = {
-    'vehicle_name': re.search(u'class="vehicleName">(.*?)</span>', data).group(1).strip(),
-    'order_date': re.search(u'class="orderDate">(.*?)</span>', data).group(1).strip(),
-    'order_num': re.search(u'class="orderNumber">(.*?)</span>', data).group(1).strip(),
-    'order_vin': re.search(u'class="vin">(.*?)</span>', data).group(1).strip(),
-    'order_edd': re.search(u'id="hidden-estimated-delivery-date" data-part="(.*?)"', data).group(1).strip(),
-    'current_state': re.search(u'"selectedStepName":(.*?)"surveyOn"', data).group(1).replace(',', '').replace('"', '').strip()
-  }
+  try:
+    order_info = {
+      'vehicle_name': re.search(u'class="vehicleName">(.*?)</span>', data).group(1).strip(),
+      'order_date': re.search(u'class="orderDate">(.*?)</span>', data).group(1).strip(),
+      'order_num': re.search(u'class="orderNumber">(.*?)</span>', data).group(1).strip(),
+      'order_vin': re.search(u'class="vin">(.*?)</span>', data).group(1).strip(),
+      'order_edd': re.search(u'id="hidden-estimated-delivery-date" data-part="(.*?)"', data).group(1).strip(),
+      'current_state': re.search(u'"selectedStepName":(.*?)"surveyOn"', data).group(1).replace(',', '').replace('"', '').strip()
+    }
 
-  state_dates = [d.replace('.', '/').strip() for d in re.findall(u'Completed On : </span>(.*?)</span>', data)]
-  for i in range(len(state_dates)):
-    if state_dates[i][5:] == '/17':
-      state_dates[i] = state_dates[i][:6] + '2017'
-    elif state_dates[i][5:] == '/18':
-      state_dates[i] = state_dates[i][:6] + '2018'
-  order_info['state_dates'] = state_dates
+    state_dates = [d.replace('.', '/').strip() for d in re.findall(u'Completed On : </span>(.*?)</span>', data)]
+    for i in range(len(state_dates)):
+      if state_dates[i][5:] == '/17':
+        state_dates[i] = state_dates[i][:6] + '2017'
+      elif state_dates[i][5:] == '/18':
+        state_dates[i] = state_dates[i][:6] + '2018'
+    order_info['state_dates'] = state_dates
 
-  temp = [each.strip() for each in re.findall(u'class="part-detail-description.*?>(.*?)</div>', data)]
-  order_info['vehicle_summary'] = []
-  for each in temp:
-    if each not in order_info['vehicle_summary']:
-      order_info['vehicle_summary'].append(each)
+    temp = [each.strip() for each in re.findall(u'class="part-detail-description.*?>(.*?)</div>', data)]
+    order_info['vehicle_summary'] = []
+    for each in temp:
+      if each not in order_info['vehicle_summary']:
+        order_info['vehicle_summary'].append(each)
 
-  return order_info
+    return order_info
+  except AttributeError:
+    return -1
 
-def format_order_info(data, vehicle_summary=False):
+def format_order_info(data, vehicle_summary=False, send_email=''):
   try:
     error_msg = re.search(u'class="top-level-error enabled">(.*?)</p>', data).group(1).strip()
     return 1, error_msg
 
   except AttributeError:
     order_info = get_order_info(data)
+    if order_info == -1:
+      return 2, 'COTUS down!'
+
+    if send_email:
+      check_state([order_info['order_edd'], order_info['current_state']], '{0}.txt'.format(order_info['order_vin']), send_email)
 
     order_str = 'Order Information:\n'
     order_str += '  {0: <21}{1}{2}{3}\n'.format('Vehicle Name:', GREEN, order_info['vehicle_name'], RESET)
@@ -122,6 +148,71 @@ def format_order_info(data, vehicle_summary=False):
 
     return 0, order_str
 
+def check_state(data, file_name, send_email):
+  edd_changed = False
+  state_changed = False
+  cur_edd = data[0]
+  cur_state = data[1].lower()
+  cur_str = '{0}\n{1}\n'.format(cur_edd, cur_state)
+
+  if cur_edd:
+    cur_edd_date = datetime.strptime(cur_edd, '%m/%d/%Y')
+  else:
+    cur_edd_date = datetime.strptime('01/01/1900', '%m/%d/%Y')
+
+  pre_data = []
+  if os.path.isfile(file_name):
+    pre_data = open(file_name, 'r').readlines()
+    os.remove(file_name)
+
+  if pre_data:
+    pre_edd = pre_data[0].replace('\n', '')
+    pre_state = pre_data[1].replace('\n', '')
+    if pre_edd:
+      pre_edd_date = datetime.strptime(pre_edd, '%m/%d/%Y')
+    else:
+      pre_edd_date = datetime.strptime('01/01/1900', '%m/%d/%Y')
+
+    if cur_edd_date > pre_edd_date:
+      edd_changed = True
+    if state_order[cur_state] > state_order[pre_state]:
+      state_changed = True
+  else:
+    if cur_edd:
+      edd_changed = True
+    state_changed = True
+
+  open(file_name, 'w').write(cur_str)
+  if edd_changed or state_changed:
+    report_with_email(send_email, cur_edd if edd_changed else '', cur_state if state_changed else '')
+
+def report_with_email(email_to, edd='', state=''):
+  if not gmail_user or not gmail_pswd:
+    print(YELLOW + 'Must set gmail username and password to send email.\n' + RESET)
+  else:
+    email_from = gmail_user
+    email_body = ''
+    if edd:
+      email_body += 'New EDD: {0}\n'.format(edd)
+    if state:
+      email_body += 'New State: {0}\n'.format(state)
+
+    email_msg = MIMEText(email_body)
+    email_msg['Subject'] = '[COTUS CHECKER] Order Status Changed'
+    email_msg['From'] = gmail_user
+    email_msg['To'] = email_to
+
+    try:
+      gmail_server = smtplib.SMTP_SSL('smtp.gmail.com', 465)
+      gmail_server.ehlo()
+      gmail_server.login(gmail_user, gmail_pswd)
+      gmail_server.sendmail(email_from, email_to, email_msg.as_string())
+      gmail_server.close()
+      print('Email Sent: {0}SUCCESS{1}'.format(GREEN, RESET))
+    except:
+      print('Email Sent: {0}FAIL{1}'.format(RED, RESET))
+      pass
+
 def main():
   parser = argparse.ArgumentParser()
   parser.add_argument('-o', '--order-number', type=str, help='order number of the car', dest='order_number')
@@ -130,6 +221,7 @@ def main():
   parser.add_argument('-v', '--vin', type=str, help='VIN of the car', dest='vin')
   parser.add_argument('-s', '--vehicle-summary', help='show vehicle summary', dest='vehicle_summary', action='store_true')
   parser.add_argument('-f', '--file', type=str, help='file with many many VIN\'s', dest='file')
+  parser.add_argument('-e', '--send-email', type=str, help='send email if state changed', dest='send_email')
   args = parser.parse_args()
 
   if args.file:
@@ -141,23 +233,23 @@ def main():
       for v in vins:
         args.vin = v
         data = get_data(args, 'vin', url=COTUS_URL1)
-        err, msg = format_order_info(data, args.vehicle_summary)
+        err, msg = format_order_info(data, args.vehicle_summary, args.send_email)
         if err:
           data = get_data(args, 'vin', url=COTUS_URL2)
-          err, msg = format_order_info(data, args.vehicle_summary)
+          err, msg = format_order_info(data, args.vehicle_summary, args.send_email)
         print(msg)
   else:
     if args.vin:
       data = get_data(args, 'vin', url=COTUS_URL1)
     else:
       data = get_data(args, url=COTUS_URL1)
-    err, msg = format_order_info(data, args.vehicle_summary)
+    err, msg = format_order_info(data, args.vehicle_summary, args.send_email)
     if err:
       if args.vin:
         data = get_data(args, 'vin', url=COTUS_URL2)
       else:
         data = get_data(args, url=COTUS_URL2)
-      err, msg = format_order_info(data, args.vehicle_summary)
+      err, msg = format_order_info(data, args.vehicle_summary, args.send_email)
       print(msg)
 
 if __name__ == '__main__':
