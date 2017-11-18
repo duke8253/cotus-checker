@@ -67,15 +67,17 @@ def setup_vin(args, g):
   g.doc.set_input('vin', args.vin)
 
 def get_data(args, which_one='', url=COTUS_URL[0]):
-  g = Grab()
-  g.go(url)
-  g.doc.set_input('freshLoaded', 'true')
   try:
+    g = Grab()
+    g.go(url)
+    g.doc.set_input('freshLoaded', 'true')
     if which_one == 'vin':
       setup_vin(args, g)
     else:
       setup_order_num(args, g)
     return g.doc.submit().unicode_body().replace('\n', '').replace('\r', '')
+  except KeyboardInterrupt:
+    exit(2)
   except:
     return ''
 
@@ -106,6 +108,8 @@ def get_order_info(data):
         order_info['vehicle_summary'].append(each)
 
     return order_info
+  except KeyboardInterrupt:
+    exit(2)
   except AttributeError:
     return -1
 
@@ -113,7 +117,8 @@ def format_order_info(data, vehicle_summary=False, send_email='', url=COTUS_URL[
   try:
     error_msg = re.search(u'class="top-level-error enabled">(.*?)</p>', data).group(1).strip()
     return 1, error_msg
-
+  except KeyboardInterrupt:
+    exit(2)
   except AttributeError:
     order_info = get_order_info(data)
     if order_info == -1:
@@ -204,6 +209,8 @@ def report_with_email(email_to, edd='', state='', first_time=False):
       gmail_server.sendmail(email_from, email_to, email_msg.as_string())
       gmail_server.close()
       print('Email Sent: {0}SUCCESS{1}'.format(GREEN, RESET))
+    except KeyboardInterrupt:
+      exit(2)
     except:
       print('Email Sent: {0}FAIL{1}'.format(RED, RESET))
       pass
