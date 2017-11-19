@@ -170,7 +170,7 @@ def check_state(data, file_name, send_email):
     pre_edd = pre_data[0].replace('\n', '')
     pre_state = pre_data[1].replace('\n', '')
 
-    if cur_edd != pre_edd:
+    if cur_edd and cur_edd != pre_edd:
       edd_changed = True
     if cur_state != pre_state:
       state_changed = True
@@ -185,7 +185,7 @@ def check_state(data, file_name, send_email):
 
 def report_with_email(email_to, edd='', state='', first_time=False):
   if not gmail_user or not gmail_pswd:
-    print(YELLOW + 'Must set gmail username and password to send email.\n' + RESET)
+    print(YELLOW + 'Must set gmail username and password to send email.' + RESET)
   else:
     email_from = gmail_user
     email_body = ''
