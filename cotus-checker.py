@@ -125,7 +125,7 @@ def format_order_info(data, vehicle_summary=False, send_email='', url=COTUS_URL[
       return 2, 'COTUS down!'
 
     if send_email:
-      email_sent = check_state(order_info, '{0}.txt'.format(order_info['order_vin']), send_email)
+      email_sent = check_state(order_info, send_email)
 
     order_str = 'Order Information:\n'
     order_str += '  {0: <21}{1}{2}{3}\n'.format('Vehicle Name:', GREEN, order_info['vehicle_name'], RESET)
@@ -156,7 +156,8 @@ def format_order_info(data, vehicle_summary=False, send_email='', url=COTUS_URL[
 
     return 0, order_str
 
-def check_state(cur_data, file_name, send_email):
+def check_state(cur_data, send_email):
+  file_name = '{0}.txt'.format(cur_data['order_vin'])
   edd_changed = False
   state_changed = False
   first_time = True
@@ -185,14 +186,14 @@ def check_state(cur_data, file_name, send_email):
   err = -1
   email_sent = ''
   if edd_changed or state_changed:
-    err, email_sent = report_with_email(send_email, cur_edd if edd_changed else '', cur_state if state_changed else '', first_time)
+    err, email_sent = report_with_email(send_email, cur_edd if edd_changed else '', cur_state if state_changed else '', cur_data['order_vin'], first_time)
 
   if not err:
     json.dump(cur_data, open(file_name, 'w'), indent=2)
 
   return email_sent
 
-def report_with_email(email_to, edd='', state='', first_time=False):
+def report_with_email(email_to, edd='', state='', vin='', first_time=False):
   if not gmail_user or not gmail_pswd:
     return -1, '{0}Invalid Gmail Username or Password{1}'.format(RED, RESET)
   else:
@@ -205,9 +206,9 @@ def report_with_email(email_to, edd='', state='', first_time=False):
 
     email_msg = MIMEText(email_body)
     if first_time:
-      email_msg['Subject'] = '[COTUS CHECKER] Order Status Changed (Initial Check)'
+      email_msg['Subject'] = '[COTUS CHECKER] Order Status Changed for VIN: {0} (Initial Check)'.format(vin)
     else:
-      email_msg['Subject'] = '[COTUS CHECKER] Order Status Changed'
+      email_msg['Subject'] = '[COTUS CHECKER] Order Status Changed for VIN: {0}'.format(vin)
     email_msg['From'] = gmail_user
     email_msg['To'] = email_to
 
