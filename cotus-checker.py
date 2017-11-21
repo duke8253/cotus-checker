@@ -20,6 +20,7 @@ import re
 import argparse
 import os
 import smtplib
+import json
 
 RED    = '\033[1;31m'
 GREEN  = '\033[1;32m'
@@ -121,7 +122,7 @@ def format_order_info(data, vehicle_summary=False, send_email='', url=COTUS_URL[
       return 2, 'COTUS down!'
 
     if send_email:
-      check_state([order_info['order_edd'], order_info['current_state']], '{0}.txt'.format(order_info['order_vin']), send_email)
+      email_sent = check_state(order_info, '{0}.txt'.format(order_info['order_vin']), send_email)
 
     order_str = 'Order Information:\n'
     order_str += '  {0: <21}{1}{2}{3}\n'.format('Vehicle Name:', GREEN, order_info['vehicle_name'], RESET)
@@ -141,6 +142,9 @@ def format_order_info(data, vehicle_summary=False, send_email='', url=COTUS_URL[
 
     order_str += '  {0: <21}{1}{2}{3}\n'.format('Source:', YELLOW, url, RESET)
 
+    if send_email and email_sent:
+        order_str += '  {0: <21}{1}\n'.format('Email Sent:', email_sent)
+
     if vehicle_summary:
       order_str += '\n  Vehicle Summary:\n'
       for each in order_info['vehicle_summary']:
@@ -149,23 +153,22 @@ def format_order_info(data, vehicle_summary=False, send_email='', url=COTUS_URL[
 
     return 0, order_str
 
-def check_state(data, file_name, send_email):
+def check_state(cur_data, file_name, send_email):
   edd_changed = False
   state_changed = False
-  cur_edd = data[0]
-  cur_state = data[1].lower()
-  cur_str = '{0}\n{1}\n'.format(cur_edd, cur_state)
   first_time = True
 
-  pre_data = []
+  cur_edd = cur_data['order_edd']
+  cur_state = cur_data['current_state']
+
+  pre_data = None
   if os.path.isfile(file_name):
     first_time = False
-    pre_data = open(file_name, 'r').readlines()
-    os.remove(file_name)
+    pre_data = json.load(open(file_name, 'r'))
 
-  if pre_data:
-    pre_edd = pre_data[0].replace('\n', '')
-    pre_state = pre_data[1].replace('\n', '')
+  if pre_data is not None:
+    pre_edd = pre_data['order_edd']
+    pre_state = pre_data['current_state']
 
     if cur_edd and cur_edd != pre_edd:
       edd_changed = True
@@ -176,13 +179,19 @@ def check_state(data, file_name, send_email):
       edd_changed = True
     state_changed = True
 
-  open(file_name, 'w').write(cur_str)
+  err = -1
+  email_sent = ''
   if edd_changed or state_changed:
-    report_with_email(send_email, cur_edd if edd_changed else '', cur_state if state_changed else '', first_time)
+    err, email_sent = report_with_email(send_email, cur_edd if edd_changed else '', cur_state if state_changed else '', first_time)
+
+  if not err:
+    json.dump(cur_data, open(file_name, 'w'), indent=2)
+
+  return email_sent
 
 def report_with_email(email_to, edd='', state='', first_time=False):
   if not gmail_user or not gmail_pswd:
-    print(YELLOW + 'Must set gmail username and password to send email.' + RESET)
+    return -1, '{0}Invalid Gmail Username or Password{1}'.format(RED, RESET)
   else:
     email_from = gmail_user
     email_body = ''
@@ -205,12 +214,11 @@ def report_with_email(email_to, edd='', state='', first_time=False):
       gmail_server.login(gmail_user, gmail_pswd)
       gmail_server.sendmail(email_from, email_to, email_msg.as_string())
       gmail_server.close()
-      print('Email Sent: {0}SUCCESS{1}'.format(GREEN, RESET))
+      return 0, '{0}SUCCESS{1}'.format(GREEN, RESET)
     except KeyboardInterrupt:
       exit(2)
     except:
-      print('Email Sent: {0}FAIL{1}'.format(RED, RESET))
-      pass
+      return -1, '{0}FAIL{1}'.format(RED, RESET)
 
 def main():
   parser = argparse.ArgumentParser()
