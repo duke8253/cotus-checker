@@ -14,8 +14,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from grab import Grab
 from email.mime.text import MIMEText
+import requests
 import re
 import argparse
 import os
@@ -56,26 +56,19 @@ def get_vins(file_name):
     vins.append(l.replace('\n', '').strip())
   return vins
 
-def setup_order_num(args, g):
-  g.doc.set_input('orderTrackingInputType', 'orderNumberInput')
-  g.doc.set_input('orderNumber', args.order_number)
-  g.doc.set_input('dealerCode', args.dealer_code)
-  g.doc.set_input('customerLastName', args.last_name)
-
-def setup_vin(args, g):
-  g.doc.set_input('orderTrackingInputType', 'vin')
-  g.doc.set_input('vin', args.vin)
-
 def get_data(args, which_one='', url=COTUS_URL[0]):
   try:
-    g = Grab()
-    g.go(url)
-    g.doc.set_input('freshLoaded', 'true')
+    payload = {'freshLoaded': 'true'}
     if which_one == 'vin':
-      setup_vin(args, g)
+      payload['orderTrackingInputType'] = 'vin'
+      payload['vin'] = args.vin
     else:
-      setup_order_num(args, g)
-    return g.doc.submit().unicode_body().replace('\n', '').replace('\r', '')
+      payload['orderTrackingInputType'] = 'orderNumberInput'
+      payload['orderNumber'] = args.order_number
+      payload['dealerCode'] = args.dealer_code
+      payload['customerLastName'] = args.last_name
+    r = requests.get(url, params=payload)
+    return r.text.replace('\n', '').replace('\r', '')
   except KeyboardInterrupt:
     exit(2)
   except:
@@ -92,6 +85,9 @@ def get_order_info(data):
       'order_edd': re.search(u'id="hidden-estimated-delivery-date" data-part="(.*?)"', data).group(1).strip(),
       'current_state': re.search(u'"selectedStepName":(.*?)"surveyOn"', data).group(1).replace(',', '').replace('"', '').strip().title()
     }
+
+    r = requests.get('http://www.fleet.ford.com/fleetdealers', params={'dealerCode': order_info['dealer_code']})
+    order_info['dealer_name'] = re.search(u'class="dealer-name">.*?>(.*?)</a>', r.text.replace('\n', '').replace('\r', '')).group(1).strip()
 
     state_dates = [d.replace('.', '/').strip() for d in re.findall(u'Completed On : </span>(.*?)</span>', data)]
     for i in range(len(state_dates)):
@@ -129,18 +125,19 @@ def format_order_info(data, vehicle_summary=False, send_email='', url=COTUS_URL[
 
     order_str = 'Order Information:\n'
     order_str += '  {0: <21}{1}{2}{3}\n'.format('Vehicle Name:', GREEN, order_info['vehicle_name'], RESET)
-    order_str += '  {0: <21}{1}\n'.format('Ordered On:', order_info['order_date'])
-    order_str += '  {0: <21}{1}\n'.format('Order Number:', order_info['order_num'])
-    order_str += '  {0: <21}{1}\n'.format('Dealer Code:', order_info['dealer_code'])
-    order_str += '  {0: <21}{1}\n'.format('VIN:', order_info['order_vin'])
+    order_str += '  {0: <21}{1}{2}{3}\n'.format('Ordered On:', WHITE, order_info['order_date'], RESET)
+    order_str += '  {0: <21}{1}{2}{3}\n'.format('Order Number:', WHITE, order_info['order_num'], RESET)
+    order_str += '  {0: <21}{1}{2}{3}\n'.format('Dealer Code:', WHITE, order_info['dealer_code'], RESET)
+    order_str += '  {0: <21}{1}{2}{3}\n'.format('VIN:', WHITE, order_info['order_vin'], RESET)
+    order_str += '  {0: <21}{1}{2}{3}\n'.format('Dealer Name:', BLUE, order_info['dealer_name'], RESET)
     order_str += '  {0: <21}{1}{2}{3}\n'.format('Estimated Delivery:', CYAN, 'N/A' if not order_info['order_edd'] else order_info['order_edd'], RESET)
     order_str += '  {0: <21}{1}{2}{3}\n'.format('Current State:', RED, order_info['current_state'], RESET)
 
     for i in range(5):
       try:
-        order_str += '  {0: <21}{1}\n'.format(order_states[i], order_info['state_dates'][i])
+        order_str += '  {0: <21}{1}{2}{3}\n'.format(order_states[i], PURPLE, order_info['state_dates'][i], RESET)
       except IndexError:
-        order_str += '  {0: <21}{1}\n'.format(order_states[i], 'N/A')
+        order_str += '  {0: <21}{1}{2}{3}\n'.format(order_states[i], PURPLE, 'N/A', RESET)
 
     order_str += '  {0: <21}{1}{2}{3}\n'.format('Source:', YELLOW, url, RESET)
 
