@@ -149,10 +149,9 @@ def format_order_info(data, vehicle_summary=False, send_email='', url=COTUS_URL[
         order_str += '  {0: <21}{1}\n'.format('Email Sent:', email_sent)
 
     if vehicle_summary:
-      order_str += '\n  Vehicle Summary:\n'
+      order_str += '  Vehicle Summary:\n'
       for each in order_info['vehicle_summary']:
         order_str += '    {0}\n'.format(each)
-      order_str += '\n'
 
     return 0, order_str
 
