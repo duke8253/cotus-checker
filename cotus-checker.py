@@ -49,13 +49,13 @@ order_states = {
 gmail_user = ''
 gmail_pswd = ''
 
-def get_vins(file_name):
+def get_orders(file_name):
   with open(file_name, 'r') as in_file:
     lines = in_file.readlines()
-  vins = []
+  orders = []
   for l in lines:
-    vins.append(l.replace('\n', '').strip())
-  return vins
+    orders.append(l.replace('\n', '').strip().split(','))
+  return orders
 
 def get_data(args, which_one='', url=COTUS_URL[0]):
   try:
@@ -239,12 +239,34 @@ def main():
       print('Invalid VIN file.')
       exit(1)
     else:
-      vins = get_vins(args.file)
-      for v in vins:
-        args.vin = v
+      orders = get_orders(args.file)
+      for o in orders:
+        if o[0] == 'vin':
+          if len(o) == 2:
+            args.vin = o[1]
+          elif len(o) == 3:
+            args.vin = o[1]
+            args.send_email = o[2]
+          else:
+            print('Invalid Order.')
+            continue
+        elif o[0] == 'num':
+          if len(o) == 3:
+            args.order_number = o[1]
+            args.dealer_code = o[2]
+          elif len(o) == 4:
+            args.order_number = o[1]
+            args.dealer_code = o[2]
+            args.send_email = o[3]
+          else:
+            print('Invalid Order.')
+            continue
+        else:
+          print('Invalid Order.')
+          continue
         for i in range(len(COTUS_URL)):
           url = COTUS_URL[i]
-          data = get_data(args, 'vin', url=url)
+          data = get_data(args, o[0], url=url)
           err, msg = format_order_info(data, args.vehicle_summary, args.send_email, url)
           if not err:
             break
