@@ -115,7 +115,7 @@ def get_order_info(data):
 
 def format_order_info(data, vehicle_summary=False, send_email='', url=COTUS_URL[0]):
   try:
-    error_msg = re.search(u'class="top-level-error enabled">(.*?)</p>', data).group(1).strip()
+    error_msg = re.search(u'class="top-level-error enabled">(.*?)</p>', data).group(1).strip() + '\n'
     return 1, error_msg
   except KeyboardInterrupt:
     exit(2)
