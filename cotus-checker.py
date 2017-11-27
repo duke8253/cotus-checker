@@ -49,6 +49,14 @@ order_states = {
 gmail_user = ''
 gmail_pswd = ''
 
+def get_window_sticker(vin):
+  payload = {'vin': vin}
+  r = requests.get('http://www.windowsticker.forddirect.com/windowsticker.pdf', params=payload)
+  if len(r.content) > 1700000:
+    open('{0}.pdf'.format(vin), 'wb').write(r.content)
+    return True
+  return False
+
 def get_orders(file_name):
   with open(file_name, 'r') as in_file:
     lines = in_file.readlines()
@@ -113,7 +121,7 @@ def get_order_info(data):
   except AttributeError:
     return -1
 
-def format_order_info(data, vehicle_summary=False, send_email='', url=COTUS_URL[0]):
+def format_order_info(data, vehicle_summary=False, send_email='', url=COTUS_URL[0], window_sticker=False):
   try:
     error_msg = re.search(u'class="top-level-error enabled">(.*?)</p>', data).group(1).strip() + '\n'
     return 1, error_msg
@@ -147,6 +155,12 @@ def format_order_info(data, vehicle_summary=False, send_email='', url=COTUS_URL[
 
     if send_email and email_sent:
         order_str += '  {0: <21}{1}\n'.format('Email Sent:', email_sent)
+
+    if window_sticker:
+      if get_window_sticker(order_info['order_vin']):
+        order_str += '  {0: <21}{1}FOUND{2}\n'.format('Window Sticker:', GREEN, RESET)
+      else:
+        order_str += '  {0: <21}{1}NOT FOUND{2}\n'.format('Window Sticker:', RED, RESET)
 
     if vehicle_summary:
       order_str += '  Vehicle Summary:\n'
@@ -232,6 +246,7 @@ def main():
   parser.add_argument('-s', '--vehicle-summary', help='show vehicle summary', dest='vehicle_summary', action='store_true')
   parser.add_argument('-f', '--file', type=str, help='file with many many VIN\'s', dest='file')
   parser.add_argument('-e', '--send-email', type=str, help='send email if state changed', dest='send_email')
+  parser.add_argument('-w', '--window-sticker', help='obtain the window sticker', dest='window_sticker', action='store_true')
   args = parser.parse_args()
 
   if args.file:
@@ -267,7 +282,7 @@ def main():
         for i in range(len(COTUS_URL)):
           url = COTUS_URL[i]
           data = get_data(args, o[0], url=url)
-          err, msg = format_order_info(data, args.vehicle_summary, args.send_email, url)
+          err, msg = format_order_info(data, args.vehicle_summary, args.send_email, url, args.window_sticker)
           if not err:
             break
         print(msg)
@@ -281,7 +296,7 @@ def main():
       else:
         print('Invalid input!')
         exit(1)
-      err, msg = format_order_info(data, args.vehicle_summary, args.send_email, url)
+      err, msg = format_order_info(data, args.vehicle_summary, args.send_email, url, args.window_sticker)
       if not err:
         break
     print(msg)
