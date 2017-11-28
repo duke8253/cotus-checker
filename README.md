@@ -4,4 +4,6 @@ This is a tool that checks COTUS using either VIN or Order Number and Dealer Cod
 
 Also supports reading in a text file with VIN on each line, and check every one of them.
 
-Note: requires requests library (http://docs.python-requests.org/en/master/).
+Note: 
+- Requires `requests` library (http://docs.python-requests.org).
+- Requires `textract` library (http://textract.readthedocs.io).
