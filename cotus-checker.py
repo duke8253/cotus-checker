@@ -19,11 +19,13 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.utils import formatdate
 import requests
+import textract
 import re
 import argparse
 import os
 import smtplib
 import json
+import tempfile
 
 RED    = '\033[1;31m'
 GREEN  = '\033[1;32m'
@@ -53,15 +55,21 @@ gmail_user = ''
 gmail_pswd = ''
 
 def get_window_sticker(vin):
+  file_name = '{0}.pdf'.format(vin)
+  if os.path.isfile(file_name):
+    return '{0}FOUND BEFORE{1}'.format(YELLOW, RESET)
+
+  temp_name = '{0}.pdf'.format(next(tempfile._get_candidate_names()))
   payload = {'vin': vin}
   r = requests.get('http://www.windowsticker.forddirect.com/windowsticker.pdf', params=payload)
-  if len(r.content) > 1700000:
-    file_name = '{0}.pdf'.format(vin)
-    if not os.path.isfile(file_name):
-      open(file_name, 'wb').write(r.content)
-      return 1, '{0}FOUND{1}'.format(GREEN, RESET)
-    return 0, '{0}FOUND{1}'.format(GREEN, RESET)
-  return -1, '{0}NOT FOUND{1}'.format(RED, RESET)
+  open(temp_name, 'wb').write(r.content)
+  text = textract.process(temp_name).decode('utf-8')
+  if 'BLEND' in text:
+    os.rename(temp_name, file_name)
+    return '{0}FOUND{1}'.format(GREEN, RESET)
+
+  os.remove(temp_name)
+  return '{0}NOT FOUND{1}'.format(RED, RESET)
 
 def get_orders(file_name):
   with open(file_name, 'r') as in_file:
@@ -98,7 +106,10 @@ def get_order_info(data):
       'dealer_code': re.search(u'"dealerInfo": { "dealerCode":(.*?)}', data).group(1).replace('"', '').strip(),
       'order_vin': re.search(u'class="vin">(.*?)</span>', data).group(1).strip(),
       'order_edd': re.search(u'id="hidden-estimated-delivery-date" data-part="(.*?)"', data).group(1).strip(),
-      'current_state': re.search(u'"selectedStepName":(.*?)"surveyOn"', data).group(1).replace(',', '').replace('"', '').strip().title()
+      'current_state': re.search(u'"selectedStepName":(.*?)"surveyOn"', data).group(1).replace(',', '').replace('"', '').strip().title(),
+      'email_sent': False,
+      'window_sticker_sent': False,
+      'initial_check_sent': False
     }
 
     try:
@@ -138,13 +149,11 @@ def format_order_info(data, vehicle_summary=False, send_email='', url=COTUS_URL[
     if order_info == -1:
       return 2, 'COTUS down!'
 
-    ws_err = -1
-    ws_str = ''
     if window_sticker:
-      ws_err, ws_str = get_window_sticker(order_info['order_vin'])
+      ws_str = get_window_sticker(order_info['order_vin'])
 
     if send_email:
-      email_sent = check_state(order_info, send_email, ws_err)
+      email_sent = check_state(order_info, send_email)
 
     order_str = 'Order Information:\n'
     order_str += '  {0: <21}{1}{2}{3}\n'.format('Vehicle Name:', GREEN, order_info['vehicle_name'], RESET)
@@ -167,8 +176,8 @@ def format_order_info(data, vehicle_summary=False, send_email='', url=COTUS_URL[
     if window_sticker:
       order_str += '  {0: <21}{1}\n'.format('Window Sticker:', ws_str)
 
-    if send_email and email_sent:
-        order_str += '  {0: <21}{1}\n'.format('Email Sent:', email_sent)
+    if send_email:
+      order_str += '  {0: <21}{1}\n'.format('Email Sent:', email_sent)
 
     if vehicle_summary:
       order_str += '  Vehicle Summary:\n'
@@ -177,44 +186,73 @@ def format_order_info(data, vehicle_summary=False, send_email='', url=COTUS_URL[
 
     return 0, order_str
 
-def check_state(cur_data, send_email, ws_err):
+def check_state(cur_data, send_email):
   file_name = '{0}.txt'.format(cur_data['order_vin'])
+  ws_name = '{0}.pdf'.format(cur_data['order_vin'])
+
+  initial_check = True
   edd_changed = False
   state_changed = False
-  first_time = True
+  send_ws = False
 
   cur_edd = cur_data['order_edd']
   cur_state = cur_data['current_state']
 
   pre_data = None
   if os.path.isfile(file_name):
-    first_time = False
     pre_data = json.load(open(file_name, 'r'))
 
   if pre_data is not None:
     pre_edd = pre_data['order_edd']
     pre_state = pre_data['current_state']
 
-    if cur_edd and cur_edd != pre_edd:
+    if cur_edd and (cur_edd != pre_edd or not pre_data['email_sent']):
       edd_changed = True
-    if cur_state != pre_state:
+
+    if cur_state != pre_state or not pre_data['email_sent']:
       state_changed = True
+
+    if not edd_changed and not state_changed:
+      cur_data['email_sent'] = pre_data['email_sent']
+
+    if os.path.isfile(ws_name):
+      send_ws = not pre_data['window_sticker_sent']
+
+    initial_check = not pre_data['initial_check_sent']
+    cur_data['initial_check_sent'] = pre_data['initial_check_sent']
+    cur_data['window_sticker_sent'] = pre_data['window_sticker_sent']
   else:
     if cur_edd:
       edd_changed = True
+
     state_changed = True
 
+    if os.path.isfile(ws_name):
+      send_ws = True
+
   err = -1
-  email_sent = ''
-  if edd_changed or state_changed or ws_err == 1:
-    err, email_sent = report_with_email(send_email, cur_edd if edd_changed else '', cur_state if state_changed else '', cur_data['order_vin'], first_time, ws_err)
+  email_sent = '{0}STATUS NOT CHANGED{1}'.format(YELLOW, RESET)
+  if edd_changed or state_changed or send_ws:
+    err, email_sent = report_with_email(
+      send_email,
+      cur_edd if edd_changed else '',
+      cur_state if state_changed else '',
+      cur_data['order_vin'],
+      initial_check,
+      send_ws
+    )
 
   if not err:
-    json.dump(cur_data, open(file_name, 'w'), indent=2)
+    cur_data['email_sent'] = True
+    cur_data['initial_check_sent'] = True
+    if send_ws:
+      cur_data['window_sticker_sent'] = True
+
+  json.dump(cur_data, open(file_name, 'w'), indent=2)
 
   return email_sent
 
-def report_with_email(email_to, edd='', state='', vin='', first_time=False, ws_err=-1):
+def report_with_email(email_to, edd='', state='', vin='', initial_check=False, send_ws=False):
   if not gmail_user or not gmail_pswd:
     return -1, '{0}Invalid Gmail Username or Password{1}'.format(RED, RESET)
   else:
@@ -224,11 +262,11 @@ def report_with_email(email_to, edd='', state='', vin='', first_time=False, ws_e
       email_body += 'EDD: {0}\n'.format(edd)
     if state:
       email_body += 'Status: {0}\n'.format(state.title())
-    if ws_err == 1:
+    if send_ws:
       email_body += 'Window Sticker Released!\n'
 
     email_msg = MIMEMultipart()
-    if first_time:
+    if initial_check:
       email_msg['Subject'] = '[COTUS CHECKER] Order Status Changed for VIN: {0} (Initial Check)'.format(vin)
     else:
       email_msg['Subject'] = '[COTUS CHECKER] Order Status Changed for VIN: {0}'.format(vin)
@@ -237,7 +275,7 @@ def report_with_email(email_to, edd='', state='', vin='', first_time=False, ws_e
     email_msg['Date'] = formatdate(localtime=True)
     email_msg.attach(MIMEText(email_body))
 
-    if ws_err == 1:
+    if send_ws:
       file_name = '{0}.pdf'.format(vin)
       with open(file_name, 'rb') as in_file:
         attachment = MIMEApplication(in_file.read(), Name=file_name)
