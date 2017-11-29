@@ -66,7 +66,7 @@ def get_window_sticker(vin):
 
   temp_name = '{0}.pdf'.format(next(tempfile._get_candidate_names()))
   payload = {'vin': vin}
-  r = requests.get('http://www.windowsticker.forddirect.com/windowsticker.pdf', params=payload)
+  r = requests.get('http://www.windowsticker.forddirect.com/windowsticker.pdf', params=payload, timeout=1)
   open(temp_name, 'wb').write(r.content)
   text = textract.process(temp_name).decode('utf-8')
   if 'BLEND' in text:
@@ -95,7 +95,7 @@ def get_data(args, which_one='', url=COTUS_URL[0]):
       payload['orderNumber'] = args.order_number
       payload['dealerCode'] = args.dealer_code
       payload['customerLastName'] = args.last_name
-    r = requests.get(url, params=payload)
+    r = requests.get(url, params=payload, timeout=1)
     return r.text.replace('\n', '').replace('\r', '')
   except KeyboardInterrupt:
     exit(2)
@@ -118,7 +118,7 @@ def get_order_info(data):
     }
 
     try:
-      r = requests.get('http://www.fleet.ford.com/fleetdealers', params={'dealerCode': order_info['dealer_code']})
+      r = requests.get('http://www.fleet.ford.com/fleetdealers', params={'dealerCode': order_info['dealer_code']}, timeout=1)
       order_info['dealer_name'] = re.search(u'class="dealer-name">.*?>(.*?)</a>', r.text.replace('\n', '').replace('\r', '')).group(1).strip()
     except AttributeError:
       order_info['dealer_name'] = 'N/A'
