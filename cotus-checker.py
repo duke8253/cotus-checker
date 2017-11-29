@@ -67,7 +67,7 @@ def get_window_sticker(vin):
   temp_name = '{0}.pdf'.format(next(tempfile._get_candidate_names()))
   payload = {'vin': vin}
   try:
-    r = requests.get('http://www.windowsticker.forddirect.com/windowsticker.pdf', params=payload, timeout=1)
+    r = requests.get('http://www.windowsticker.forddirect.com/windowsticker.pdf', params=payload, timeout=3)
   except requests.exceptions.Timeout:
     return '{0}SERVER TIMEOUT{1}'.format(RED, RESET)
 
@@ -100,7 +100,7 @@ def get_data(args, which_one='', url=COTUS_URL[0]):
       payload['dealerCode'] = args.dealer_code
       payload['customerLastName'] = args.last_name
     try:
-      r = requests.get(url, params=payload, timeout=1)
+      r = requests.get(url, params=payload, timeout=3)
       return r.text.replace('\n', '').replace('\r', '')
     except requests.exceptions.Timeout:
       return 'SERVER TIMEOUT'
@@ -126,7 +126,7 @@ def get_order_info(data):
     }
 
     try:
-      r = requests.get('http://www.fleet.ford.com/fleetdealers', params={'dealerCode': order_info['dealer_code']}, timeout=1)
+      r = requests.get('http://www.fleet.ford.com/fleetdealers', params={'dealerCode': order_info['dealer_code']}, timeout=3)
       order_info['dealer_name'] = re.search(u'class="dealer-name">.*?>(.*?)</a>', r.text.replace('\n', '').replace('\r', '')).group(1).strip()
     except (AttributeError, requests.exceptions.Timeout):
       order_info['dealer_name'] = 'N/A'
