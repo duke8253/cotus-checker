@@ -26,6 +26,8 @@ import os
 import smtplib
 import json
 import tempfile
+import threading
+import copy
 
 RED    = '\033[1;31m'
 GREEN  = '\033[1;32m'
@@ -49,6 +51,9 @@ order_states = {
   3: 'In Transit:',
   4: 'Delivered:'
 }
+
+the_lock = threading.Lock()
+order_str_list = []
 
 # Set your own gmail address and password
 gmail_user = ''
@@ -294,7 +299,22 @@ def report_with_email(email_to, edd='', state='', vin='', initial_check=False, s
     except:
       return -1, '{0}FAIL{1}'.format(RED, RESET)
 
+def check_order(args, order, tid):
+  global order_str_list
+
+  for i in range(len(COTUS_URL)):
+    url = COTUS_URL[i]
+    data = get_data(args, order[0], url=url)
+    err, msg = format_order_info(data, args.vehicle_summary, args.send_email, url, args.window_sticker)
+    if not err:
+      break
+  the_lock.acquire()
+  order_str_list[tid] = msg
+  the_lock.release()
+
 def main():
+  global order_str_list
+
   parser = argparse.ArgumentParser()
   parser.add_argument('-o', '--order-number', type=str, help='order number of the car', dest='order_number')
   parser.add_argument('-d', '--dealer-code', type=str, help='dealer code of the order', dest='dealer_code')
@@ -312,6 +332,7 @@ def main():
       exit(1)
     else:
       orders = get_orders(args.file)
+      threads = []
       for o in orders:
         if o[0] == 'vin':
           if len(o) == 2:
@@ -336,20 +357,22 @@ def main():
         else:
           print('Invalid Order.')
           continue
-        for i in range(len(COTUS_URL)):
-          url = COTUS_URL[i]
-          data = get_data(args, o[0], url=url)
-          err, msg = format_order_info(data, args.vehicle_summary, args.send_email, url, args.window_sticker)
-          if not err:
-            break
-        print(msg)
+        tid = len(threads)
+        threads.append(threading.Thread(target=check_order, args=(copy.deepcopy(args), o, tid)))
+      order_str_list = ['' for i in range(len(threads))]
+      for t in threads:
+        t.start()
+      for t in threads:
+        t.join()
+      for s in order_str_list:
+        print(s)
   else:
     for i in range(len(COTUS_URL)):
       url = COTUS_URL[i]
       if args.vin:
-        data = get_data(args, 'vin', url=url)
+        data = get_data(copy.deepcopy(args), 'vin', url=url)
       elif args.order_number and args.dealer_code and args.last_name:
-        data = get_data(args, url=url)
+        data = get_data(copy.deepcopy(args), url=url)
       else:
         print('Invalid input!')
         exit(1)
