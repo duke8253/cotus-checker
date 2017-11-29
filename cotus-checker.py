@@ -359,7 +359,7 @@ def main():
           continue
         tid = len(threads)
         threads.append(threading.Thread(target=check_order, args=(copy.deepcopy(args), o, tid)))
-      order_str_list = ['' for i in range(len(threads))]
+        order_str_list.append('')
       for t in threads:
         t.start()
       for t in threads:
@@ -370,9 +370,9 @@ def main():
     for i in range(len(COTUS_URL)):
       url = COTUS_URL[i]
       if args.vin:
-        data = get_data(copy.deepcopy(args), 'vin', url=url)
+        data = get_data(args, 'vin', url=url)
       elif args.order_number and args.dealer_code and args.last_name:
-        data = get_data(copy.deepcopy(args), url=url)
+        data = get_data(args, url=url)
       else:
         print('Invalid input!')
         exit(1)
