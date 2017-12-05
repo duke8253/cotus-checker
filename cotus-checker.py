@@ -59,6 +59,21 @@ order_str_list = []
 gmail_user = ''
 gmail_pswd = ''
 
+GET_TIMEOUT = 5
+GET_RETRY = 3
+
+def get_requests(url, payload):
+  for i in range(GET_RETRY):
+    try:
+      r = requests.get(url, params=payload, timeout=GET_TIMEOUT)
+      break
+    except requests.exceptions.Timeout:
+      if i == GET_RETRY - 1:
+        return -1, '{0}SERVER TIMEOUT{1}'.format(RED, RESET)
+      else:
+        pass
+  return 0, r
+
 def get_window_sticker(vin):
   file_name = '{0}.pdf'.format(vin)
   if os.path.isfile(file_name):
@@ -66,10 +81,9 @@ def get_window_sticker(vin):
 
   temp_name = '{0}.pdf'.format(next(tempfile._get_candidate_names()))
   payload = {'vin': vin}
-  try:
-    r = requests.get('http://www.windowsticker.forddirect.com/windowsticker.pdf', params=payload, timeout=3)
-  except requests.exceptions.Timeout:
-    return '{0}SERVER TIMEOUT{1}'.format(RED, RESET)
+  err, r = get_requests('http://www.windowsticker.forddirect.com/windowsticker.pdf', payload)
+  if err:
+    return r
 
   open(temp_name, 'wb').write(r.content)
   text = textract.process(temp_name).decode('utf-8')
@@ -99,11 +113,12 @@ def get_data(args, which_one='', url=COTUS_URL[0]):
       payload['orderNumber'] = args.order_number
       payload['dealerCode'] = args.dealer_code
       payload['customerLastName'] = args.last_name
-    try:
-      r = requests.get(url, params=payload, timeout=3)
+
+    err, r = get_requests(url, payload)
+    if err:
+      return r
+    else:
       return r.text.replace('\n', '').replace('\r', '')
-    except requests.exceptions.Timeout:
-      return 'SERVER TIMEOUT'
 
   except KeyboardInterrupt:
     exit(2)
@@ -125,11 +140,14 @@ def get_order_info(data):
       'initial_check_sent': False
     }
 
-    try:
-      r = requests.get('http://www.fleet.ford.com/fleetdealers', params={'dealerCode': order_info['dealer_code']}, timeout=3)
-      order_info['dealer_name'] = re.search(u'class="dealer-name">.*?>(.*?)</a>', r.text.replace('\n', '').replace('\r', '')).group(1).strip()
-    except (AttributeError, requests.exceptions.Timeout):
-      order_info['dealer_name'] = 'N/A'
+    err, r = get_requests('http://www.fleet.ford.com/fleetdealers', {'dealerCode': order_info['dealer_code']})
+    if err:
+      order_info['dealer_name'] = r
+    else:
+      try:
+        order_info['dealer_name'] = re.search(u'class="dealer-name">.*?>(.*?)</a>', r.text.replace('\n', '').replace('\r', '')).group(1).strip()
+      except AttributeError:
+        order_info['dealer_name'] = 'N/A'
 
     state_dates = [d.replace('.', '/').strip() for d in re.findall(u'Completed On : </span>(.*?)</span>', data)]
     for i in range(len(state_dates)):
