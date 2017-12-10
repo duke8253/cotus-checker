@@ -137,7 +137,9 @@ def get_order_info(data):
       'current_state': re.search(u'"selectedStepName":(.*?)"surveyOn"', data).group(1).replace(',', '').replace('"', '').strip().title(),
       'email_sent': False,
       'window_sticker_sent': False,
-      'initial_check_sent': False
+      'initial_check_sent': False,
+      'edd_changed': False,
+      'state_changed': False
     }
 
     err, r = get_requests('http://www.fleet.ford.com/fleetdealers', {'dealerCode': order_info['dealer_code']})
@@ -225,6 +227,7 @@ def check_state(cur_data, send_email):
   edd_changed = False
   state_changed = False
   send_ws = False
+  email_sent = True
 
   cur_edd = cur_data['order_edd']
   cur_state = cur_data['current_state']
@@ -237,36 +240,47 @@ def check_state(cur_data, send_email):
     pre_edd = pre_data['order_edd']
     pre_state = pre_data['current_state']
 
-    if cur_edd and (cur_edd != pre_edd or not pre_data['email_sent']):
-      edd_changed = True
+    if cur_edd != pre_edd:
+      edd_changed = cur_data['edd_changed'] = True
 
-    if cur_state != pre_state or not pre_data['email_sent']:
-      state_changed = True
+    if cur_state != pre_state:
+      state_changed = cur_data['state_changed'] = True
 
-    if not edd_changed and not state_changed:
-      cur_data['email_sent'] = pre_data['email_sent']
+    if not pre_data['email_sent']:
+      email_sent = False
+      edd_changed = cur_data['edd_changed'] = pre_data['edd_changed']
+      state_changed = cur_data['state_changed'] = pre_data['state_changed']
 
     if os.path.isfile(ws_name):
       send_ws = not pre_data['window_sticker_sent']
 
     initial_check = not pre_data['initial_check_sent']
+    cur_data['email_sent'] = pre_data['email_sent']
     cur_data['initial_check_sent'] = pre_data['initial_check_sent']
     cur_data['window_sticker_sent'] = pre_data['window_sticker_sent']
   else:
     if cur_edd:
-      edd_changed = True
+      edd_changed = cur_data['edd_changed'] = True
 
-    state_changed = True
+    state_changed = cur_data['state_changed'] = True
 
     if os.path.isfile(ws_name):
       send_ws = True
 
   err = -1
-  email_sent = '{0}STATUS NOT CHANGED{1}'.format(YELLOW, RESET)
-  if edd_changed or state_changed or send_ws:
-    err, email_sent = report_with_email(
+  ret_msg = '{0}STATUS NOT CHANGED{1}'.format(YELLOW, RESET)
+  if edd_changed or state_changed or send_ws or not email_sent:
+    if edd_changed:
+      if not cur_edd:
+        edd = 'Removed'
+      else:
+        edd = cur_edd
+    else:
+      edd = ''
+
+    err, ret_msg = report_with_email(
       send_email,
-      cur_edd if edd_changed else '',
+      edd,
       cur_state if state_changed else '',
       cur_data['order_vin'],
       initial_check,
@@ -281,11 +295,11 @@ def check_state(cur_data, send_email):
 
   json.dump(cur_data, open(file_name, 'w'), indent=2)
 
-  return email_sent
+  return ret_msg
 
 def report_with_email(email_to, edd='', state='', vin='', initial_check=False, send_ws=False):
   if not gmail_user or not gmail_pswd:
-    return -1, '{0}Invalid Gmail Username or Password{1}'.format(RED, RESET)
+    return -1, '{0}Empty Gmail Username or Password{1}'.format(RED, RESET)
   else:
     email_from = gmail_user
     email_body = ''
