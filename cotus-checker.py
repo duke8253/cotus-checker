@@ -76,23 +76,37 @@ def get_requests(url, payload):
 
 def get_window_sticker(vin):
   file_name = '{0}.pdf'.format(vin)
+  file_size = 0
   if os.path.isfile(file_name):
-    return '{0}FOUND BEFORE{1}'.format(YELLOW, RESET)
+    file_size = os.path.getsize(file_name)
 
   temp_name = '{0}.pdf'.format(next(tempfile._get_candidate_names()))
   payload = {'vin': vin}
   err, r = get_requests('http://www.windowsticker.forddirect.com/windowsticker.pdf', payload)
   if err:
-    return r
+    if file_size == 0:
+      return -1, r
+    else:
+      return 0, '{0}FOUND BEFORE{1}'.format(YELLOW, RESET)
 
   open(temp_name, 'wb').write(r.content)
   text = textract.process(temp_name).decode('utf-8')
-  if 'BLEND' in text:
-    os.rename(temp_name, file_name)
-    return '{0}FOUND{1}'.format(GREEN, RESET)
 
-  os.remove(temp_name)
-  return '{0}NOT FOUND{1}'.format(RED, RESET)
+  if 'BLEND' in text:
+    if file_size != 0:
+      if os.path.getsize(temp_name) != file_size:
+        os.remove(file_name)
+        os.rename(temp_name, file_name)
+        return 2, '{0}UPDATED{1}'.format(GREEN, RESET)
+      else:
+        os.remove(temp_name)
+        return 0, '{0}FOUND BEFORE{1}'.format(YELLOW, RESET)
+    else:
+      os.rename(temp_name, file_name)
+      return 1, '{0}RELEASED{1}'.format(GREEN, RESET)
+  else:
+    os.remove(temp_name)
+    return -1, '{0}NOT FOUND{1}'.format(RED, RESET)
 
 def get_orders(file_name):
   with open(file_name, 'r') as in_file:
@@ -183,10 +197,10 @@ def format_order_info(data, vehicle_summary=False, send_email='', url=COTUS_URL[
       return 2, 'COTUS down!'
 
     if window_sticker:
-      ws_str = get_window_sticker(order_info['order_vin'])
+      ws_err, ws_str = get_window_sticker(order_info['order_vin'])
 
     if send_email:
-      email_sent = check_state(order_info, send_email)
+      email_sent = check_state(order_info, send_email, ws_err)
 
     order_str = 'Order Information:\n'
     order_str += '  {0: <21}{1}{2}{3}\n'.format('Vehicle Name:', GREEN, order_info['vehicle_name'], RESET)
@@ -219,7 +233,7 @@ def format_order_info(data, vehicle_summary=False, send_email='', url=COTUS_URL[
 
     return 0, order_str
 
-def check_state(cur_data, send_email):
+def check_state(cur_data, send_email, ws_err):
   file_name = '{0}.txt'.format(cur_data['order_vin'])
   ws_name = '{0}.pdf'.format(cur_data['order_vin'])
 
@@ -253,6 +267,10 @@ def check_state(cur_data, send_email):
 
     if os.path.isfile(ws_name):
       send_ws = not pre_data['window_sticker_sent']
+      if send_ws:
+        ws_err = 1
+      elif ws_err == 2:
+        send_ws = True
 
     initial_check = not pre_data['initial_check_sent']
     cur_data['email_sent'] = pre_data['email_sent']
@@ -266,6 +284,7 @@ def check_state(cur_data, send_email):
 
     if os.path.isfile(ws_name):
       send_ws = True
+      ws_err = 1
 
   err = -1
   ret_msg = '{0}STATUS NOT CHANGED{1}'.format(YELLOW, RESET)
@@ -284,7 +303,8 @@ def check_state(cur_data, send_email):
       cur_state if state_changed else '',
       cur_data['order_vin'],
       initial_check,
-      send_ws
+      send_ws,
+      ws_err
     )
 
   if not err:
@@ -297,7 +317,7 @@ def check_state(cur_data, send_email):
 
   return ret_msg
 
-def report_with_email(email_to, edd='', state='', vin='', initial_check=False, send_ws=False):
+def report_with_email(email_to, edd='', state='', vin='', initial_check=False, send_ws=False, ws_err=0):
   if not gmail_user or not gmail_pswd:
     return -1, '{0}Empty Gmail Username or Password{1}'.format(RED, RESET)
   else:
@@ -308,7 +328,10 @@ def report_with_email(email_to, edd='', state='', vin='', initial_check=False, s
     if state:
       email_body += 'Status: {0}\n'.format(state.title())
     if send_ws:
-      email_body += 'Window Sticker Released!\n'
+      if ws_err == 1:
+        email_body += 'Window Sticker Released!\n'
+      else:
+        email_body += 'Window Sticker Updated!\n'
 
     email_msg = MIMEMultipart()
     if initial_check:
