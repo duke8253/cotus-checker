@@ -198,13 +198,13 @@ def get_order_info(data):
 def format_order_info(data, vehicle_summary=False, send_email='', url=COTUS_URL[0], window_sticker=False):
   try:
     error_msg = re.search(u'class="top-level-error enabled">(.*?)</p>', data).group(1).strip() + '\n'
-    return 1, error_msg
+    return -1, error_msg
   except KeyboardInterrupt:
     exit(2)
   except AttributeError:
     order_info = get_order_info(data)
     if order_info == -1:
-      return 2, 'COTUS down!'
+      return -2, 'COTUS down!'
 
     if window_sticker:
       ws_err, ws_str = get_window_sticker(order_info['order_vin'])
@@ -241,7 +241,10 @@ def format_order_info(data, vehicle_summary=False, send_email='', url=COTUS_URL[
       for each in order_info['vehicle_summary']:
         order_str += '    {0}\n'.format(each)
 
-    return 0, order_str
+    if 'delivered' in order_info['current_state'].lower():
+      return 1, order_str
+    else:
+      return 0, order_str
 
 def check_state(cur_data, send_email, ws_err):
   file_name = '{0}.txt'.format(cur_data['order_vin'])
@@ -372,17 +375,19 @@ def report_with_email(email_to, edd='', state='', vin='', initial_check=False, s
     except:
       return -1, '{0}FAIL{1}'.format(RED, RESET)
 
-def check_order(q):
+def check_order(q_in, q_out):
   global order_str_list
 
-  while not q.empty():
-    args, order, list_id = q.get()
+  while not q_in.empty():
+    args, order, list_id = q_in.get()
     for i in range(len(COTUS_URL)):
       url = COTUS_URL[i]
       data = get_data(args, order[0], url=url)
       err, msg = format_order_info(data, args.vehicle_summary, args.send_email, url, args.window_sticker)
-      if not err:
+      if err >= 0:
         break
+    if err == 1:
+      q_out.put(list_id)
     the_lock.acquire()
     order_str_list[list_id] = msg
     the_lock.release()
@@ -395,10 +400,11 @@ def main():
   parser.add_argument('-d', '--dealer-code', type=str, help='dealer code of the order', dest='dealer_code')
   parser.add_argument('-l', '--last-name', type=str, help='customer\'s last name (not used for now)', dest='last_name', default='xxx')
   parser.add_argument('-v', '--vin', type=str, help='VIN of the car', dest='vin')
-  parser.add_argument('-s', '--vehicle-summary', help='show vehicle summary', dest='vehicle_summary', action='store_true')
+  parser.add_argument('-s', '--vehicle-summary', help='show vehicle summary', dest='vehicle_summary', action='store_true', default=False)
   parser.add_argument('-f', '--file', type=str, help='file with many many VIN\'s', dest='file')
   parser.add_argument('-e', '--send-email', type=str, help='send email if state changed', dest='send_email')
-  parser.add_argument('-w', '--window-sticker', help='obtain the window sticker', dest='window_sticker', action='store_true')
+  parser.add_argument('-w', '--window-sticker', help='obtain the window sticker', dest='window_sticker', action='store_true', default=False)
+  parser.add_argument('-r', '--remove-delivered', help='remove delivered orders from the file', dest='remove_delivered', action='store_true', default=False)
   args = parser.parse_args()
 
   if args.file:
@@ -406,8 +412,9 @@ def main():
       print('Invalid VIN file.')
       exit(1)
     else:
-      q = Queue()
-      threads = [threading.Thread(target=check_order, args=(q, )) for i in range(10)]
+      q_in = Queue()
+      q_out = Queue()
+      threads = [threading.Thread(target=check_order, args=(q_in, q_out)) for i in range(10)]
 
       orders = get_orders(args.file)
       for o in orders:
@@ -442,7 +449,7 @@ def main():
         else:
           print('Invalid Order.')
           continue
-        q.put((copy.deepcopy(args), o, len(order_str_list)))
+        q_in.put((copy.deepcopy(args), o, len(order_str_list)))
         order_str_list.append('')
       for t in threads:
         t.start()
@@ -450,6 +457,14 @@ def main():
         t.join()
       for s in order_str_list:
         print(s)
+
+      if args.remove_delivered:
+        remove_list = list(q_out.queue)
+        with open(args.file, 'w') as out_file:
+          for i in range(len(orders)):
+            if i not in remove_list:
+              out_file.write('{0}\n'.format(','.join(orders[i])))
+
   else:
     for i in range(len(COTUS_URL)):
       url = COTUS_URL[i]
@@ -461,7 +476,7 @@ def main():
         print('Invalid input!')
         exit(1)
       err, msg = format_order_info(data, args.vehicle_summary, args.send_email, url, args.window_sticker)
-      if not err:
+      if err >= 0:
         break
     print(msg)
 
