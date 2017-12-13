@@ -18,6 +18,7 @@ from email.mime.application import MIMEApplication
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.utils import formatdate
+from queue import Queue
 import requests
 import textract
 import re
@@ -28,6 +29,7 @@ import json
 import tempfile
 import threading
 import copy
+import hashlib
 
 RED    = '\033[1;31m'
 GREEN  = '\033[1;32m'
@@ -76,15 +78,21 @@ def get_requests(url, payload):
 
 def get_window_sticker(vin):
   file_name = '{0}.pdf'.format(vin)
-  file_size = 0
+  hash_old = hashlib.sha256()
+  hash_new = hashlib.sha256()
+  sha256_old = ''
+  sha256_new = ''
+
   if os.path.isfile(file_name):
-    file_size = os.path.getsize(file_name)
+    with open(file_name, 'rb') as in_file:
+      hash_old.update(in_file.read())
+    sha256_old = hash_old.hexdigest()
 
   temp_name = '{0}.pdf'.format(next(tempfile._get_candidate_names()))
   payload = {'vin': vin}
   err, r = get_requests('http://www.windowsticker.forddirect.com/windowsticker.pdf', payload)
   if err:
-    if file_size == 0:
+    if not sha256_old:
       return -1, r
     else:
       return 0, '{0}FOUND BEFORE{1}'.format(YELLOW, RESET)
@@ -93,8 +101,10 @@ def get_window_sticker(vin):
   text = textract.process(temp_name).decode('utf-8')
 
   if 'BLEND' in text:
-    if file_size != 0:
-      if os.path.getsize(temp_name) != file_size:
+    hash_new.update(r.content)
+    sha256_new = hash_new.hexdigest()
+    if sha256_old:
+      if sha256_new != sha256_old:
         os.remove(file_name)
         os.rename(temp_name, file_name)
         return 2, '{0}UPDATED{1}'.format(GREEN, RESET)
@@ -362,18 +372,20 @@ def report_with_email(email_to, edd='', state='', vin='', initial_check=False, s
     except:
       return -1, '{0}FAIL{1}'.format(RED, RESET)
 
-def check_order(args, order, tid):
+def check_order(q):
   global order_str_list
 
-  for i in range(len(COTUS_URL)):
-    url = COTUS_URL[i]
-    data = get_data(args, order[0], url=url)
-    err, msg = format_order_info(data, args.vehicle_summary, args.send_email, url, args.window_sticker)
-    if not err:
-      break
-  the_lock.acquire()
-  order_str_list[tid] = msg
-  the_lock.release()
+  while not q.empty():
+    args, order, list_id = q.get()
+    for i in range(len(COTUS_URL)):
+      url = COTUS_URL[i]
+      data = get_data(args, order[0], url=url)
+      err, msg = format_order_info(data, args.vehicle_summary, args.send_email, url, args.window_sticker)
+      if not err:
+        break
+    the_lock.acquire()
+    order_str_list[list_id] = msg
+    the_lock.release()
 
 def main():
   global order_str_list
@@ -394,13 +406,20 @@ def main():
       print('Invalid VIN file.')
       exit(1)
     else:
+      q = Queue()
+      threads = [threading.Thread(target=check_order, args=(q, )) for i in range(10)]
+
       orders = get_orders(args.file)
-      threads = []
       for o in orders:
         if o[0] == 'vin':
           if len(o) == 2:
+            args.order_number = ''
+            args.dealer_code = ''
             args.vin = o[1]
+            args.send_email = ''
           elif len(o) == 3:
+            args.order_number = ''
+            args.dealer_code = ''
             args.vin = o[1]
             args.send_email = o[2]
           else:
@@ -410,9 +429,12 @@ def main():
           if len(o) == 3:
             args.order_number = o[1]
             args.dealer_code = o[2]
+            args.vin = ''
+            args.send_email = ''
           elif len(o) == 4:
             args.order_number = o[1]
             args.dealer_code = o[2]
+            args.vin = ''
             args.send_email = o[3]
           else:
             print('Invalid Order.')
@@ -420,8 +442,7 @@ def main():
         else:
           print('Invalid Order.')
           continue
-        tid = len(threads)
-        threads.append(threading.Thread(target=check_order, args=(copy.deepcopy(args), o, tid)))
+        q.put((copy.deepcopy(args), o, len(order_str_list)))
         order_str_list.append('')
       for t in threads:
         t.start()
