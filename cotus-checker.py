@@ -214,7 +214,7 @@ def format_order_info(data, vehicle_summary=False, send_email='', url=COTUS_URL[
 
     for i in range(5):
       try:
-        order_str += '  {0: <21}{1}{2}{3}\n'.format(order_states[i], PURPLE, order_info['state_dates'][i], RESET)
+        order_str += '  {0: <21}{1}Completed On {2}{3}{4}\n'.format(order_states[i], PURPLE, GREEN, order_info['state_dates'][i], RESET)
       except IndexError:
         order_str += '  {0: <21}{1}{2}{3}\n'.format(order_states[i], PURPLE, 'N/A', RESET)
 
