@@ -19,6 +19,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.utils import formatdate
 from queue import Queue
+from PIL import Image, ImageDraw, ImageFont
 import requests
 import textract
 import re
@@ -64,10 +65,13 @@ gmail_pswd = ''
 GET_TIMEOUT = 5
 GET_RETRY = 3
 
-def get_requests(url, payload):
+def get_requests(url, payload=''):
   for i in range(GET_RETRY):
     try:
-      r = requests.get(url, params=payload, timeout=GET_TIMEOUT)
+      if payload:
+        r = requests.get(url, params=payload, timeout=GET_TIMEOUT)
+      else:
+        r = requests.get(url, timeout=GET_TIMEOUT)
       break
     except requests.exceptions.Timeout:
       if i == GET_RETRY - 1:
@@ -187,13 +191,58 @@ def get_order_info(data):
       if each not in order_info['vehicle_summary']:
         order_info['vehicle_summary'].append(each)
 
+    temp_links = re.search(u'div id="exterior-slides">(.*?)<div', data).group(1).strip().split('/><')
+    order_info['car_pic_link'] = temp_links[-1].replace('/>', '').replace('img', '').replace('src=', '').replace('\"', '').strip()
+
     return order_info
   except KeyboardInterrupt:
     exit(2)
   except AttributeError:
     return -1
 
-def format_order_info(data, vehicle_summary=False, send_email='', url=COTUS_URL[0], window_sticker=False):
+def get_car_image(order_info):
+  err, r = get_requests(order_info['car_pic_link'])
+  if not err:
+    image_file_name = '{0}.png'.format(order_info['order_vin'])
+    open(image_file_name, 'wb').write(r.content)
+    img = Image.open(image_file_name)
+    img = img.convert('RGBA')
+    img_w, img_h = img.size
+    img_sig = Image.new('RGBA', (1320, 359), (255, 255, 255, 255))
+    img_sig.paste(img, (0, -40), img)
+
+    try:
+      fnt = ImageFont.truetype('SourceCodePro-Bold.ttf', 20)
+    except OSError:
+      fnt = ImageFont.truetype('Arial Bold.ttf', 20)
+    d = ImageDraw.Draw(img_sig)
+
+    d.text((600, 60), 'Vehicle Name:', font=fnt, fill=(0, 0, 0))
+    d.text((850, 60), order_info['vehicle_name'], font=fnt, fill=(14, 57, 201))
+
+    d.text((600, 85), 'Ordered On:', font=fnt, fill=(0, 0, 0))
+    d.text((850, 85), order_info['order_date'], font=fnt, fill=(54, 178, 8))
+
+    d.text((600, 110), 'Estimated Delivery:', font=fnt, fill=(0, 0, 0))
+    d.text((850, 110), 'N/A' if not order_info['order_edd'] else order_info['order_edd'], font=fnt, fill=(229, 150, 32))
+
+    d.text((600, 135), 'Current State:', font=fnt, fill=(0, 0, 0))
+    d.text((850, 135), order_info['current_state'], font=fnt, fill=(209, 6, 40))
+
+    for i in range(5):
+      d.text((600, 160 + i * 25), order_states[i], font=fnt, fill=(0, 0, 0))
+      try:
+        d.text((850, 160 + i * 25), 'Completed On {0}'.format(order_info['state_dates'][i]), font=fnt, fill=(133, 17, 216))
+      except IndexError:
+        d.text((850, 160 + i * 25), 'N/A', font=fnt, fill=(133, 17, 216))
+
+    img_sig.save(image_file_name, 'PNG')
+
+    return 0
+
+  return -1
+
+def format_order_info(data, vehicle_summary=False, send_email='', url=COTUS_URL[0], window_sticker=False, generate_image=False):
   try:
     error_msg = re.search(u'class="top-level-error enabled">(.*?)</p>', data).group(1).strip() + '\n'
     return -1, error_msg
@@ -204,11 +253,12 @@ def format_order_info(data, vehicle_summary=False, send_email='', url=COTUS_URL[
     if order_info == -1:
       return -2, 'COTUS down!'
 
+    ws_err = -1
     if window_sticker:
       ws_err, ws_str = get_window_sticker(order_info['order_vin'])
 
     if send_email:
-      email_sent = check_state(order_info, send_email, ws_err)
+      email_sent = check_state(order_info, send_email, ws_err, generate_image)
 
     order_str = 'Order Information:\n'
     order_str += '  {0: <21}{1}{2}{3}\n'.format('Vehicle Name:', GREEN, order_info['vehicle_name'], RESET)
@@ -244,7 +294,7 @@ def format_order_info(data, vehicle_summary=False, send_email='', url=COTUS_URL[
     else:
       return 0, order_str
 
-def check_state(cur_data, send_email, ws_err):
+def check_state(cur_data, send_email, ws_err, generate_image):
   file_name = '{0}.txt'.format(cur_data['order_vin'])
   ws_name = '{0}.pdf'.format(cur_data['order_vin'])
 
@@ -300,6 +350,10 @@ def check_state(cur_data, send_email, ws_err):
   err = -1
   ret_msg = '{0}STATUS NOT CHANGED{1}'.format(YELLOW, RESET)
   if edd_changed or state_changed or send_ws or not email_sent:
+    img_err = -1
+    if generate_image:
+      img_err = get_car_image(cur_data)
+
     if edd_changed:
       if not cur_edd:
         edd = 'Removed'
@@ -315,7 +369,8 @@ def check_state(cur_data, send_email, ws_err):
       cur_data['order_vin'],
       initial_check,
       send_ws,
-      ws_err
+      ws_err,
+      img_err
     )
 
   if not err:
@@ -328,7 +383,7 @@ def check_state(cur_data, send_email, ws_err):
 
   return ret_msg
 
-def report_with_email(email_to, edd='', state='', vin='', initial_check=False, send_ws=False, ws_err=0):
+def report_with_email(email_to, edd='', state='', vin='', initial_check=False, send_ws=False, ws_err=0, img_err=-1):
   if not gmail_user or not gmail_pswd:
     return -1, '{0}Empty Gmail Username or Password{1}'.format(RED, RESET)
   else:
@@ -361,6 +416,13 @@ def report_with_email(email_to, edd='', state='', vin='', initial_check=False, s
       attachment['Content-Disposition'] = 'attachment; filename="{0}"'.format(file_name)
       email_msg.attach(attachment)
 
+    if not img_err:
+      file_name = '{0}.png'.format(vin)
+      with open(file_name, 'rb') as in_file:
+        attachment = MIMEApplication(in_file.read(), Name=file_name)
+      attachment['Content-Disposition'] = 'attachment; filename="{0}"'.format(file_name)
+      email_msg.attach(attachment)
+
     try:
       gmail_server = smtplib.SMTP_SSL('smtp.gmail.com', 465)
       gmail_server.ehlo()
@@ -381,7 +443,7 @@ def check_order(q_in, q_out):
     for i in range(len(COTUS_URL)):
       url = COTUS_URL[i]
       data = get_data(args, order[0], url=url)
-      err, msg = format_order_info(data, args.vehicle_summary, args.send_email, url, args.window_sticker)
+      err, msg = format_order_info(data, args.vehicle_summary, args.send_email, url, args.window_sticker, args.generate_image)
       if err >= 0:
         break
     if err == 1:
@@ -403,6 +465,7 @@ def main():
   parser.add_argument('-e', '--send-email', type=str, help='send email if state changed', dest='send_email')
   parser.add_argument('-w', '--window-sticker', help='obtain the window sticker', dest='window_sticker', action='store_true', default=False)
   parser.add_argument('-r', '--remove-delivered', help='remove delivered orders from the file', dest='remove_delivered', action='store_true', default=False)
+  parser.add_argument('-i', '--generate-image', help='generate an image with the dates and the car on it', dest='generate_image', action='store_true', default=False)
   args = parser.parse_args()
 
   if args.file:
@@ -473,7 +536,7 @@ def main():
       else:
         print('Invalid input!')
         exit(1)
-      err, msg = format_order_info(data, args.vehicle_summary, args.send_email, url, args.window_sticker)
+      err, msg = format_order_info(data, args.vehicle_summary, args.send_email, url, args.window_sticker, args.generate_image)
       if err >= 0:
         break
     print(msg)
