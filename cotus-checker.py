@@ -166,14 +166,12 @@ def get_order_info(data):
       'state_changed': False
     }
 
-    err, r = get_requests('http://www.fleet.ford.com/fleetdealers', {'dealerCode': order_info['dealer_code']})
-    if err:
-      order_info['dealer_name'] = r
-    else:
-      try:
-        order_info['dealer_name'] = re.search(u'class="dealer-name">.*?>(.*?)</a>', r.text.replace('\n', '').replace('\r', '')).group(1).strip()
-      except AttributeError:
+    try:
+      order_info['dealer_name'] = re.search(u'class="dealerName">(.*?)</span>', data).group(1).replace(',', '').replace('"', '').strip()
+      if not order_info['dealer_name']:
         order_info['dealer_name'] = 'N/A'
+    except AttributeError:
+      order_info['dealer_name'] = 'N/A'
 
     state_dates = [d.replace('.', '/').strip() for d in re.findall(u'Completed On : </span>(.*?)</span>', data)]
     for i in range(len(state_dates)):
