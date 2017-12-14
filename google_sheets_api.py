@@ -66,9 +66,9 @@ def get_data_from_sheet(args, my_dirname):
     orders = []
     for row in values:
       if row[1] == 'VIN':
-        orders.append(','.join(['vin', row[4].upper().strip(), row[0].lower().strip()]))
+        orders.append(['vin', row[4].upper().strip(), row[0].lower().strip()])
       else:
-        orders.append(','.join(['num', row[2].upper().strip(), row[3].upper().strip(), row[0].lower().strip()]))
+        orders.append(['num', row[2].upper().strip(), row[3].upper().strip(), row[0].lower().strip()])
 
     row_num += len(values)
     open(file_name, 'w').write(str(row_num))

@@ -502,7 +502,7 @@ def main():
       orders = get_orders(args.file)
       orders.extend(new_orders)
       if new_orders:
-        with open(args.file, 'a') as out_file:
+        with open(args.file, 'w') as out_file:
           for each in orders:
             out_file.write('{0}\n'.format(each))
 
