@@ -9,16 +9,13 @@ from oauth2client import client
 from oauth2client import tools
 from oauth2client.file import Storage
 
-import argparse
-flags = argparse.ArgumentParser(parents=[tools.argparser]).parse_args()
-
 # If modifying these scopes, delete your previously saved credentials
 # at ~/.credentials/sheets.googleapis.com-python-quickstart.json
 SCOPES = 'https://www.googleapis.com/auth/spreadsheets.readonly'
 CLIENT_SECRET_FILE = 'client_secret.json'
 APPLICATION_NAME = 'Google Sheets API for Python'
 
-def get_credentials(my_dirname):
+def get_credentials(args, my_dirname):
   """Gets valid user credentials from storage.
 
   If nothing has been stored, or if the stored credentials are invalid,
@@ -38,29 +35,24 @@ def get_credentials(my_dirname):
   if not credentials or credentials.invalid:
     flow = client.flow_from_clientsecrets(CLIENT_SECRET_FILE, SCOPES)
     flow.user_agent = APPLICATION_NAME
-    if flags:
-      credentials = tools.run_flow(flow, store, flags)
+    if args:
+      credentials = tools.run_flow(flow, store, args)
     else: # Needed only for compatibility with Python 2.6
       credentials = tools.run(flow, store)
     print('Storing credentials to ' + credential_path)
   return credentials
 
-def get_data_from_sheet():
+def get_data_from_sheet(args, my_dirname):
   """Shows basic usage of the Sheets API.
 
   Creates a Sheets API service object
   """
-
-  my_abspath = os.path.abspath(__file__)
-  my_dirname = os.path.dirname(my_abspath)
-  os.chdir(my_dirname)
-
   row_num = 2
   file_name = os.path.join(my_dirname, 'google_sheet.log')
   if os.path.isfile(file_name):
     row_num = int(open(file_name, 'r').read())
 
-  credentials = get_credentials(my_dirname)
+  credentials = get_credentials(args, my_dirname)
   http = credentials.authorize(httplib2.Http())
   discoveryUrl = ('https://sheets.googleapis.com/$discovery/rest?version=v4')
   service = discovery.build('sheets', 'v4', http=http, discoveryServiceUrl=discoveryUrl)
@@ -74,15 +66,12 @@ def get_data_from_sheet():
     orders = []
     for row in values:
       if row[1] == 'VIN':
-        orders.append(','.join(['vin', row[4].upper(), row[0]]))
+        orders.append(','.join(['vin', row[4].upper().strip(), row[0].lower().strip()]))
       else:
-        orders.append(','.join(['num', row[2].upper(), row[3].upper(), row[0]]))
-    print(orders)
+        orders.append(','.join(['num', row[2].upper().strip(), row[3].upper().strip(), row[0].lower().strip()]))
+
     row_num += len(values)
     open(file_name, 'w').write(str(row_num))
-
     return orders
-  return []
 
-if __name__ == '__main__':
-  get_data_from_sheet()
+  return []

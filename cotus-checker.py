@@ -21,6 +21,8 @@ from email.utils import formatdate
 from queue import Queue
 from PIL import Image, ImageDraw, ImageFont
 from gmail_secret import gmail_user, gmail_pswd
+from oauth2client import tools
+from google_sheets_api import get_data_from_sheet
 import requests
 import textract
 import re
@@ -474,7 +476,7 @@ def main():
     shutil.rmtree(DIR_WINDOW_STICKER, ignore_errors=True)
     os.mkdir(DIR_WINDOW_STICKER)
 
-  parser = argparse.ArgumentParser()
+  parser = argparse.ArgumentParser(parents=[tools.argparser])
   parser.add_argument('-o', '--order-number', type=str, help='order number of the car', dest='order_number')
   parser.add_argument('-d', '--dealer-code', type=str, help='dealer code of the order', dest='dealer_code')
   parser.add_argument('-l', '--last-name', type=str, help='customer\'s last name (not used for now)', dest='last_name', default='xxx')
@@ -496,7 +498,13 @@ def main():
       q_out = Queue()
       threads = [threading.Thread(target=check_order, args=(q_in, q_out)) for i in range(10)]
 
+      new_orders = get_data_from_sheet(args, my_dirname)
+      with open(args.file, 'a') as out_file:
+        out_file.write('\n')
+        for each in new_orders:
+          out_file.write('{0}\n'.format(each))
       orders = get_orders(args.file)
+
       for o in orders:
         if o[0] == 'vin':
           if len(o) == 2:
