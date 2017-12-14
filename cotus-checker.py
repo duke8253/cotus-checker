@@ -20,6 +20,7 @@ from email.mime.text import MIMEText
 from email.utils import formatdate
 from queue import Queue
 from PIL import Image, ImageDraw, ImageFont
+from gmail_secret import gmail_user, gmail_pswd
 import requests
 import textract
 import re
@@ -31,6 +32,7 @@ import tempfile
 import threading
 import copy
 import hashlib
+import shutil
 
 RED    = '\033[1;31m'
 GREEN  = '\033[1;32m'
@@ -58,12 +60,12 @@ order_states = {
 the_lock = threading.Lock()
 order_str_list = []
 
-# Set your own gmail address and password
-gmail_user = ''
-gmail_pswd = ''
-
 GET_TIMEOUT = 5
 GET_RETRY = 3
+
+DIR_INFO = 'info'
+DIR_IMAGE = 'image'
+DIR_WINDOW_STICKER = 'window_sticker'
 
 def get_requests(url, payload=''):
   for i in range(GET_RETRY):
@@ -81,7 +83,7 @@ def get_requests(url, payload=''):
   return 0, r
 
 def get_window_sticker(vin):
-  file_name = '{0}.pdf'.format(vin)
+  file_name = os.path.join(DIR_WINDOW_STICKER, '{0}.pdf'.format(vin))
   hash_old = hashlib.sha256()
   hash_new = hashlib.sha256()
   sha256_old = ''
@@ -92,7 +94,7 @@ def get_window_sticker(vin):
       hash_old.update(in_file.read())
     sha256_old = hash_old.hexdigest()
 
-  temp_name = '{0}.pdf'.format(next(tempfile._get_candidate_names()))
+  temp_name = os.path.join(DIR_WINDOW_STICKER, '{0}.pdf'.format(next(tempfile._get_candidate_names())))
   payload = {'vin': vin}
   err, r = get_requests('http://www.windowsticker.forddirect.com/windowsticker.pdf', payload)
   if err:
@@ -203,7 +205,7 @@ def get_order_info(data):
 def get_car_image(order_info):
   err, r = get_requests(order_info['car_pic_link'])
   if not err:
-    image_file_name = '{0}.png'.format(order_info['order_vin'])
+    image_file_name = os.path.join(DIR_IMAGE, '{0}.png'.format(order_info['order_vin']))
     open(image_file_name, 'wb').write(r.content)
     img = Image.open(image_file_name)
     img = img.convert('RGBA')
@@ -295,8 +297,8 @@ def format_order_info(data, vehicle_summary=False, send_email='', url=COTUS_URL[
       return 0, order_str
 
 def check_state(cur_data, send_email, ws_err, generate_image):
-  file_name = '{0}.txt'.format(cur_data['order_vin'])
-  ws_name = '{0}.pdf'.format(cur_data['order_vin'])
+  file_name = os.path.join(DIR_INFO, '{0}.json'.format(cur_data['order_vin']))
+  ws_name = os.path.join(DIR_WINDOW_STICKER, '{0}.pdf'.format(cur_data['order_vin']))
 
   initial_check = True
   edd_changed = False
@@ -410,14 +412,14 @@ def report_with_email(email_to, edd='', state='', vin='', initial_check=False, s
     email_msg.attach(MIMEText(email_body))
 
     if send_ws:
-      file_name = '{0}.pdf'.format(vin)
+      file_name = os.path.join(DIR_WINDOW_STICKER, '{0}.pdf'.format(vin))
       with open(file_name, 'rb') as in_file:
         attachment = MIMEApplication(in_file.read(), Name=file_name)
       attachment['Content-Disposition'] = 'attachment; filename="{0}"'.format(file_name)
       email_msg.attach(attachment)
 
     if not img_err:
-      file_name = '{0}.png'.format(vin)
+      file_name = os.path.join(DIR_IMAGE, '{0}.png'.format(vin))
       with open(file_name, 'rb') as in_file:
         attachment = MIMEApplication(in_file.read(), Name=file_name)
       attachment['Content-Disposition'] = 'attachment; filename="{0}"'.format(file_name)
@@ -453,7 +455,24 @@ def check_order(q_in, q_out):
     the_lock.release()
 
 def main():
-  global order_str_list
+  global order_str_list, DIR_INFO, DIR_IMAGE, DIR_WINDOW_STICKER
+
+  my_abspath = os.path.abspath(__file__)
+  my_dirname = os.path.dirname(my_abspath)
+  os.chdir(my_dirname)
+
+  DIR_INFO = os.path.join(my_dirname, DIR_INFO)
+  DIR_IMAGE = os.path.join(my_dirname, DIR_IMAGE)
+  DIR_WINDOW_STICKER = os.path.join(my_dirname, DIR_WINDOW_STICKER)
+  if not os.path.isdir(DIR_INFO):
+    shutil.rmtree(DIR_INFO, ignore_errors=True)
+    os.mkdir(DIR_INFO)
+  if not os.path.isdir(DIR_IMAGE):
+    shutil.rmtree(DIR_IMAGE, ignore_errors=True)
+    os.mkdir(DIR_IMAGE)
+  if not os.path.isdir(DIR_WINDOW_STICKER):
+    shutil.rmtree(DIR_WINDOW_STICKER, ignore_errors=True)
+    os.mkdir(DIR_WINDOW_STICKER)
 
   parser = argparse.ArgumentParser()
   parser.add_argument('-o', '--order-number', type=str, help='order number of the car', dest='order_number')
