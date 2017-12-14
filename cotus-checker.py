@@ -499,11 +499,12 @@ def main():
       threads = [threading.Thread(target=check_order, args=(q_in, q_out)) for i in range(10)]
 
       new_orders = get_data_from_sheet(args, my_dirname)
-      with open(args.file, 'a') as out_file:
-        out_file.write('\n')
-        for each in new_orders:
-          out_file.write('{0}\n'.format(each))
       orders = get_orders(args.file)
+      orders.extend(new_orders)
+      if new_orders:
+        with open(args.file, 'a') as out_file:
+          for each in orders:
+            out_file.write('{0}\n'.format(each))
 
       for o in orders:
         if o[0] == 'vin':
