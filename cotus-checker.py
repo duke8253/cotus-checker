@@ -261,8 +261,7 @@ def get_order_info(data):
             if each not in order_info['vehicle_summary']:
                 order_info['vehicle_summary'].append(each)
 
-        temp_links = re.search(u'div id="exterior-slides">(.*?)<div', data).group(1).strip().split('/><')
-        order_info['car_pic_link'] = temp_links[-1].decode('utf-8').replace('/>', '').replace('img', '').replace('src=', '').replace('"', '').strip()
+        order_info['car_pic_link'] = re.search(u'img src=(.*?)EXT/4/vehicle.png', data).group(1).replace('"', '').strip() + 'EXT/4/vehicle.png'
 
         return order_info
     except KeyboardInterrupt:
