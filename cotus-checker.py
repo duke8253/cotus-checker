@@ -145,7 +145,7 @@ def get_orders(file_name, new_orders):
       orders.append(o)
 
   if new_orders:
-    with open(args.file, 'w') as out_file:
+    with open(file_name, 'w') as out_file:
       for i in range(len(orders)):
         out_file.write('{0}\n'.format(orders[i]))
         orders[i] = orders[i].split(',')
