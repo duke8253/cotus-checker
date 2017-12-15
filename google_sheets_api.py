@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
 
 from __future__ import print_function
-import httplib2
-import os
-
 from apiclient import discovery
 from oauth2client import client
 from oauth2client import tools
 from oauth2client.file import Storage
+import httplib2
+import os
 
 # If modifying these scopes, delete your previously saved credentials
-# at ~/.credentials/sheets.googleapis.com-python-quickstart.json
+# at ~/.credentials/sheets.googleapis.com-cotus-checker.json
 SCOPES = 'https://www.googleapis.com/auth/spreadsheets.readonly'
 CLIENT_SECRET_FILE = 'client_secret.json'
 APPLICATION_NAME = 'Google Sheets API for Python'
@@ -36,10 +35,7 @@ def get_credentials(args, my_dirname):
     if not credentials or credentials.invalid:
         flow = client.flow_from_clientsecrets(CLIENT_SECRET_FILE, SCOPES)
         flow.user_agent = APPLICATION_NAME
-        if args:
-            credentials = tools.run_flow(flow, store, args)
-        else:  # Needed only for compatibility with Python 2.6
-            credentials = tools.run(flow, store)
+        credentials = tools.run_flow(flow, store, args)
         print('Storing credentials to ' + credential_path)
     return credentials
 
@@ -56,12 +52,12 @@ def get_data_from_sheet(args, my_dirname):
 
     credentials = get_credentials(args, my_dirname)
     http = credentials.authorize(httplib2.Http())
-    discoveryUrl = ('https://sheets.googleapis.com/$discovery/rest?version=v4')
-    service = discovery.build('sheets', 'v4', http=http, discoveryServiceUrl=discoveryUrl)
+    discovery_url = ('https://sheets.googleapis.com/$discovery/rest?version=v4')
+    service = discovery.build('sheets', 'v4', http=http, discoveryServiceUrl=discovery_url)
 
-    spreadsheetId = '1FWYQBZLjvVLFrp88BbPmPJXE0wDZDY_L73y7VQIeRFI'
-    rangeName = 'Form Responses 1!B{0}:F'.format(row_num)
-    result = service.spreadsheets().values().get(spreadsheetId=spreadsheetId, range=rangeName).execute()
+    spreadsheet_id = '1FWYQBZLjvVLFrp88BbPmPJXE0wDZDY_L73y7VQIeRFI'
+    range_name = 'Form Responses 1!B{0}:F'.format(row_num)
+    result = service.spreadsheets().values().get(spreadsheetId=spreadsheet_id, range=range_name).execute()
     values = result.get('values', [])
 
     if values:

@@ -184,6 +184,17 @@ def get_orders(file_name, new_orders):
 
 
 def get_data(args, which_one='', url=COTUS_URL[0]):
+    """
+
+    :param args:
+    :type args:
+    :param which_one:
+    :type which_one:
+    :param url:
+    :type url:
+    :return:
+    :rtype:
+    """
     try:
         payload = {'freshLoaded': 'true'}
         if which_one == 'vin':
@@ -206,6 +217,13 @@ def get_data(args, which_one='', url=COTUS_URL[0]):
 
 
 def get_order_info(data):
+    """
+
+    :param data:
+    :type data:
+    :return:
+    :rtype:
+    """
     try:
         order_info = {
             'vehicle_name': re.search(u'class="vehicleName">(.*?)</span>', data).group(1).strip(),
@@ -214,8 +232,7 @@ def get_order_info(data):
             'dealer_code': re.search(u'"dealerInfo": { "dealerCode":(.*?)}', data).group(1).replace('"', '').strip(),
             'order_vin': re.search(u'class="vin">(.*?)</span>', data).group(1).strip(),
             'order_edd': re.search(u'id="hidden-estimated-delivery-date" data-part="(.*?)"', data).group(1).strip(),
-            'current_state': re.search(u'"selectedStepName":(.*?)"surveyOn"', data).group(1).replace(',', '').replace(
-                '"', '').strip().title(),
+            'current_state': re.search(u'"selectedStepName":(.*?)"surveyOn"', data).group(1).replace(',', '').replace('"', '').strip().title(),
             'email_sent': False,
             'window_sticker_sent': False,
             'initial_check_sent': False,
@@ -224,9 +241,7 @@ def get_order_info(data):
         }
 
         try:
-            order_info['dealer_name'] = re.search(u'class="dealerName">(.*?)</span>', data).group(1).replace(',',
-                                                                                                             '').replace(
-                '"', '').strip()
+            order_info['dealer_name'] = re.search(u'class="dealerName">(.*?)</span>', data).group(1).replace(',', '').replace('"', '').strip()
             if not order_info['dealer_name']:
                 order_info['dealer_name'] = 'N/A'
         except AttributeError:
@@ -247,8 +262,7 @@ def get_order_info(data):
                 order_info['vehicle_summary'].append(each)
 
         temp_links = re.search(u'div id="exterior-slides">(.*?)<div', data).group(1).strip().split('/><')
-        order_info['car_pic_link'] = temp_links[-1].replace('/>', '').replace('img', '').replace('src=', '').replace(
-            '\"', '').strip()
+        order_info['car_pic_link'] = temp_links[-1].decode('utf-8').replace('/>', '').replace('img', '').replace('src=', '').replace('"', '').strip()
 
         return order_info
     except KeyboardInterrupt:
@@ -258,13 +272,20 @@ def get_order_info(data):
 
 
 def get_car_image(order_info):
+    """
+    Generate a simple summary image using the order information.
+
+    :param order_info:
+    :type order_info:
+    :return:
+    :rtype:
+    """
     err, r = get_requests(order_info['car_pic_link'])
     if not err:
         image_file_name = os.path.join(DIR_IMAGE, '{0}.png'.format(order_info['order_vin']))
         open(image_file_name, 'wb').write(r.content)
         img = Image.open(image_file_name)
         img = img.convert('RGBA')
-        img_w, img_h = img.size
         img_sig = Image.new('RGBA', (1320, 359), (255, 255, 255, 255))
         img_sig.paste(img, (0, -40), img)
 
@@ -299,8 +320,25 @@ def get_car_image(order_info):
     return -1
 
 
-def format_order_info(data, vehicle_summary=False, send_email='', url=COTUS_URL[0], window_sticker=False,
-                      generate_image=False):
+def format_order_info(data, vehicle_summary=False, send_email='', url=COTUS_URL[0], window_sticker=False, generate_image=False):
+    """
+    Format the order info data into a readable string.
+
+    :param data:
+    :type data:
+    :param vehicle_summary:
+    :type vehicle_summary:
+    :param send_email:
+    :type send_email:
+    :param url:
+    :type url:
+    :param window_sticker:
+    :type window_sticker:
+    :param generate_image:
+    :type generate_image:
+    :return:
+    :rtype:
+    """
     try:
         error_msg = re.search(u'class="top-level-error enabled">(.*?)</p>', data).group(1).strip() + '\n'
         return -1, error_msg
@@ -312,9 +350,11 @@ def format_order_info(data, vehicle_summary=False, send_email='', url=COTUS_URL[
             return -2, 'COTUS down!'
 
         ws_err = -1
+        ws_str = '{0}N/A{1}'.format(RED, RESET)
         if window_sticker:
             ws_err, ws_str = get_window_sticker(order_info['order_vin'])
 
+        email_sent = '{0}N/A{1}'.format(RED, RESET)
         if send_email:
             email_sent = check_state(order_info, send_email, ws_err, generate_image)
 
@@ -357,6 +397,19 @@ def format_order_info(data, vehicle_summary=False, send_email='', url=COTUS_URL[
 
 
 def check_state(cur_data, send_email, ws_err, generate_image):
+    """
+
+    :param cur_data:
+    :type cur_data:
+    :param send_email:
+    :type send_email:
+    :param ws_err:
+    :type ws_err:
+    :param generate_image:
+    :type generate_image:
+    :return:
+    :rtype:
+    """
     file_name = os.path.join(DIR_INFO, '{0}.json'.format(cur_data['order_vin']))
     ws_name = os.path.join(DIR_WINDOW_STICKER, '{0}.pdf'.format(cur_data['order_vin']))
 
@@ -447,6 +500,27 @@ def check_state(cur_data, send_email, ws_err, generate_image):
 
 
 def report_with_email(email_to, edd='', state='', vin='', initial_check=False, send_ws=False, ws_err=0, img_err=-1):
+    """
+
+    :param email_to:
+    :type email_to:
+    :param edd:
+    :type edd:
+    :param state:
+    :type state:
+    :param vin:
+    :type vin:
+    :param initial_check:
+    :type initial_check:
+    :param send_ws:
+    :type send_ws:
+    :param ws_err:
+    :type ws_err:
+    :param img_err:
+    :type img_err:
+    :return:
+    :rtype:
+    """
     if not gmail_user or not gmail_pswd:
         return -1, '{0}Empty Gmail Username or Password{1}'.format(RED, RESET)
     else:
@@ -497,20 +571,32 @@ def report_with_email(email_to, edd='', state='', vin='', initial_check=False, s
             return 0, '{0}SUCCESS{1}'.format(GREEN, RESET)
         except KeyboardInterrupt:
             exit(2)
-        except:
+        except (smtplib.SMTPException, smtplib.SMTPServerDisconnected, smtplib.SMTPResponseException,
+                smtplib.SMTPSenderRefused, smtplib.SMTPRecipientsRefused, smtplib.SMTPDataError, smtplib.SMTPConnectError,
+                smtplib.SMTPHeloError, smtplib.SMTPNotSupportedError, smtplib.SMTPAuthenticationError):
             return -1, '{0}FAIL{1}'.format(RED, RESET)
 
 
 def check_order(q_in, q_out):
+    """
+
+    :param q_in:
+    :type q_in:
+    :param q_out:
+    :type q_out:
+    :return:
+    :rtype:
+    """
     global order_str_list
 
     while not q_in.empty():
         args, order, list_id = q_in.get()
+        err = -1
+        msg = ''
         for i in range(len(COTUS_URL)):
             url = COTUS_URL[i]
             data = get_data(args, order[0], url=url)
-            err, msg = format_order_info(data, args.vehicle_summary, args.send_email, url, args.window_sticker,
-                                         args.generate_image)
+            err, msg = format_order_info(data, args.vehicle_summary, args.send_email, url, args.window_sticker, args.generate_image)
             if err >= 0:
                 break
         if err == 1:
@@ -521,6 +607,11 @@ def check_order(q_in, q_out):
 
 
 def main():
+    """
+
+    :return:
+    :rtype:
+    """
     global order_str_list, DIR_INFO, DIR_IMAGE, DIR_WINDOW_STICKER
 
     my_abspath = os.path.abspath(__file__)
@@ -543,19 +634,14 @@ def main():
     parser = argparse.ArgumentParser(parents=[tools.argparser])
     parser.add_argument('-o', '--order-number', type=str, help='order number of the car', dest='order_number')
     parser.add_argument('-d', '--dealer-code', type=str, help='dealer code of the order', dest='dealer_code')
-    parser.add_argument('-l', '--last-name', type=str, help='customer\'s last name (not used for now)',
-                        dest='last_name', default='xxx')
+    parser.add_argument('-l', '--last-name', type=str, help='customer\'s last name (not used for now)', dest='last_name', default='xxx')
     parser.add_argument('-v', '--vin', type=str, help='VIN of the car', dest='vin')
-    parser.add_argument('-s', '--vehicle-summary', help='show vehicle summary', dest='vehicle_summary',
-                        action='store_true', default=False)
+    parser.add_argument('-s', '--vehicle-summary', help='show vehicle summary', dest='vehicle_summary', action='store_true', default=False)
     parser.add_argument('-f', '--file', type=str, help='file with many many VIN\'s', dest='file')
     parser.add_argument('-e', '--send-email', type=str, help='send email if state changed', dest='send_email')
-    parser.add_argument('-w', '--window-sticker', help='obtain the window sticker', dest='window_sticker',
-                        action='store_true', default=False)
-    parser.add_argument('-r', '--remove-delivered', help='remove delivered orders from the file',
-                        dest='remove_delivered', action='store_true', default=False)
-    parser.add_argument('-i', '--generate-image', help='generate an image with the dates and the car on it',
-                        dest='generate_image', action='store_true', default=False)
+    parser.add_argument('-w', '--window-sticker', help='obtain the window sticker', dest='window_sticker', action='store_true', default=False)
+    parser.add_argument('-r', '--remove-delivered', help='remove delivered orders from the file', dest='remove_delivered', action='store_true', default=False)
+    parser.add_argument('-i', '--generate-image', help='generate an image with the dates and the car on it', dest='generate_image', action='store_true', default=False)
     args = parser.parse_args()
 
     if args.file:
@@ -617,6 +703,8 @@ def main():
                             out_file.write('{0}\n'.format(','.join(orders[i])))
 
     else:
+        data = None
+        msg = ''
         for i in range(len(COTUS_URL)):
             url = COTUS_URL[i]
             if args.vin:
@@ -626,8 +714,7 @@ def main():
             else:
                 print('Invalid input!')
                 exit(1)
-            err, msg = format_order_info(data, args.vehicle_summary, args.send_email, url, args.window_sticker,
-                                         args.generate_image)
+            err, msg = format_order_info(data, args.vehicle_summary, args.send_email, url, args.window_sticker, args.generate_image)
             if err >= 0:
                 break
         print(msg)
