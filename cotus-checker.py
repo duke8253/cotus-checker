@@ -215,10 +215,7 @@ def get_car_image(order_info):
     img_sig = Image.new('RGBA', (1320, 359), (255, 255, 255, 255))
     img_sig.paste(img, (0, -40), img)
 
-    try:
-      fnt = ImageFont.truetype('SourceCodePro-Bold.ttf', 20)
-    except OSError:
-      fnt = ImageFont.truetype('Arial Bold.ttf', 20)
+    fnt = ImageFont.truetype('SourceCodePro-Bold.ttf', 20)
     d = ImageDraw.Draw(img_sig)
 
     d.text((600, 60), 'Vehicle Name:', font=fnt, fill=(0, 0, 0))
