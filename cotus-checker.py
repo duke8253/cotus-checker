@@ -261,7 +261,7 @@ def get_order_info(data):
             if each not in order_info['vehicle_summary']:
                 order_info['vehicle_summary'].append(each)
 
-        order_info['car_pic_link'] = re.search(u'img src=(.*?)EXT/4/vehicle.png', data).group(1).replace('"', '').strip() + 'EXT/4/vehicle.png'
+        order_info['car_pic_link'] = re.search(u'http://build\.ford\.com/(?:(?!http://build\.ford\.com/|/EXT/4/vehicle\.png).)*?/EXT/4/vehicle\.png', data).group().strip()
 
         return order_info
     except KeyboardInterrupt:
