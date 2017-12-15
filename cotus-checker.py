@@ -131,7 +131,11 @@ def get_orders(file_name):
     lines = in_file.readlines()
   orders = []
   for l in lines:
-    orders.append(l.replace('\n', '').strip().split(','))
+    o = l.replace('\n', '').strip().split(',')
+    for i in range(1, len(o) - 1):
+      o[i] = o[i].upper()
+    o[-1] = o[-1].lower()
+    orders.append(o)
   return orders
 
 def get_data(args, which_one='', url=COTUS_URL[0]):
@@ -498,6 +502,7 @@ def main():
       new_orders = get_data_from_sheet(args, my_dirname)
       orders = get_orders(args.file)
       orders.extend(new_orders)
+      orders = list(set(orders))
       if new_orders:
         with open(args.file, 'w') as out_file:
           for each in orders:
