@@ -432,17 +432,19 @@ def report_with_email(email_to, edd='', state='', vin='', initial_check=False, s
     email_msg.attach(MIMEText(email_body))
 
     if send_ws:
-      file_name = os.path.join(DIR_WINDOW_STICKER, '{0}.pdf'.format(vin))
+      base_name = '{0}.pdf'.format(vin)
+      file_name = os.path.join(DIR_WINDOW_STICKER, base_name)
       with open(file_name, 'rb') as in_file:
-        attachment = MIMEApplication(in_file.read(), Name=file_name)
-      attachment['Content-Disposition'] = 'attachment; filename="{0}"'.format(file_name)
+        attachment = MIMEApplication(in_file.read(), Name=base_name)
+      attachment['Content-Disposition'] = 'attachment; filename="{0}"'.format(base_name)
       email_msg.attach(attachment)
 
     if not img_err:
-      file_name = os.path.join(DIR_IMAGE, '{0}.png'.format(vin))
+      base_name = '{0}.png'.format(vin)
+      file_name = os.path.join(DIR_IMAGE, base_name)
       with open(file_name, 'rb') as in_file:
-        attachment = MIMEApplication(in_file.read(), Name=file_name)
-      attachment['Content-Disposition'] = 'attachment; filename="{0}"'.format(file_name)
+        attachment = MIMEApplication(in_file.read(), Name=base_name)
+      attachment['Content-Disposition'] = 'attachment; filename="{0}"'.format(base_name)
       email_msg.attach(attachment)
 
     try:
