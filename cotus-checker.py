@@ -126,16 +126,27 @@ def get_window_sticker(vin):
     os.remove(temp_name)
     return -1, '{0}NOT FOUND{1}'.format(RED, RESET)
 
-def get_orders(file_name):
+def get_orders(file_name, new_orders):
   with open(file_name, 'r') as in_file:
     lines = in_file.readlines()
+
   orders = []
   for l in lines:
-    o = l.replace('\n', '').strip().split(',')
+    o = l.replace('\n', '').replace(' ', '').strip().split(',')
     for i in range(1, len(o) - 1):
       o[i] = o[i].upper()
     o[-1] = o[-1].lower()
-    orders.append(o)
+    orders.append(','.join(o))
+  orders.extend(new_orders)
+  orders = list(set(orders))
+  for i in range(len(orders)):
+    order[i] = order[i].split(',')
+
+  if new_orders:
+    with open(args.file, 'w') as out_file:
+      for each in orders:
+        out_file.write('{0}\n'.format(each))
+
   return orders
 
 def get_data(args, which_one='', url=COTUS_URL[0]):
@@ -499,15 +510,7 @@ def main():
       q_out = Queue()
       threads = [threading.Thread(target=check_order, args=(q_in, q_out)) for i in range(10)]
 
-      new_orders = get_data_from_sheet(args, my_dirname)
-      orders = get_orders(args.file)
-      orders.extend(new_orders)
-      orders = list(set(orders))
-      if new_orders:
-        with open(args.file, 'w') as out_file:
-          for each in orders:
-            out_file.write('{0}\n'.format(each))
-
+      orders = get_orders(args.file, get_data_from_sheet(args, my_dirname))
       for o in orders:
         if o[0] == 'vin':
           if len(o) == 2:
