@@ -136,16 +136,22 @@ def get_orders(file_name, new_orders):
     for i in range(1, len(o) - 1):
       o[i] = o[i].upper()
     o[-1] = o[-1].lower()
-    orders.append(','.join(o))
-  orders.extend(new_orders)
-  orders = list(set(orders))
-  for i in range(len(orders)):
-    order[i] = order[i].split(',')
+    o = ','.join(o)
+    if o not in orders:
+      orders.append(o)
+
+  for o in new_orders:
+    if o not in orders:
+      orders.append(o)
 
   if new_orders:
     with open(args.file, 'w') as out_file:
-      for each in orders:
-        out_file.write('{0}\n'.format(each))
+      for i in range(len(orders)):
+        out_file.write('{0}\n'.format(orders[i]))
+        orders[i] = orders[i].split(',')
+  else:
+    for i in range(len(orders)):
+      orders[i] = orders[i].split(',')
 
   return orders
 
