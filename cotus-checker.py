@@ -285,7 +285,9 @@ def get_car_image(order_info):
         open(image_file_name, 'wb').write(r.content)
         img = Image.open(image_file_name)
         img = img.convert('RGBA')
-        img_sig = Image.new('RGBA', (1320, 359), (255, 255, 255, 255))
+        width = 850 + len(order_info['vehicle_name']) * 14
+        width = width if width > 1200 else 1200
+        img_sig = Image.new('RGBA', (width, 359), (255, 255, 255, 255))
         img_sig.paste(img, (0, -40), img)
 
         fnt = ImageFont.truetype('SourceCodePro-Bold.ttf', 20)
