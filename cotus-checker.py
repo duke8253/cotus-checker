@@ -695,7 +695,7 @@ def main():
                         print('Invalid Order.')
                         continue
                 elif o[0] == 'num':
-                    if not o[1].isalnum():
+                    if not o[1].isalnum() or not o[2].isalnum():
                         if len(order) == 3:
                             msg = 'Order Number: {0}, Dealer Code: {1}'.format(order[1], order[2])
                         else:
