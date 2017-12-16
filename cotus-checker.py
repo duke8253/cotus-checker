@@ -600,6 +600,17 @@ def check_order(q_in, q_out):
                 break
         if err == 1:
             q_out.put(list_id)
+        elif err == -1:
+            if order[0] == 'vin':
+                if len(order) == 2:
+                    msg = 'VIN: {0}\n{1}'.format(order[1], msg)
+                else:
+                    msg = 'VIN: {0}, Email: {1}\n{2}'.format(order[1], order[2], msg)
+            else:
+                if len(order) == 3:
+                    msg = 'Order Number: {0}, Dealer Code: {1}\n{2}'.format(order[1], order[2], msg)
+                else:
+                    msg = 'Order Number: {0}, Dealer Code: {1}, Email: {2}\n{3}'.format(order[1], order[2], order[3], msg)
         the_lock.acquire()
         order_str_list[list_id] = msg
         the_lock.release()
