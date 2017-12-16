@@ -666,6 +666,14 @@ def main():
             orders = get_orders(args.file, get_data_from_sheet(args, my_dirname))
             for o in orders:
                 if o[0] == 'vin':
+                    if not o[1].isalnum():
+                        if len(order) == 2:
+                            msg = 'VIN: {0}'.format(order[1])
+                        else:
+                            msg = 'VIN: {0}, Email: {1}'.format(order[1], order[2])
+                        print(msg)
+                        print('Invalid Order.')
+                        continue
                     if len(o) == 2:
                         args.order_number = ''
                         args.dealer_code = ''
@@ -677,9 +685,22 @@ def main():
                         args.vin = o[1]
                         args.send_email = o[2]
                     else:
+                        if len(order) == 2:
+                            msg = 'VIN: {0}'.format(order[1])
+                        else:
+                            msg = 'VIN: {0}, Email: {1}'.format(order[1], order[2])
+                        print(msg)
                         print('Invalid Order.')
                         continue
                 elif o[0] == 'num':
+                    if not o[1].isalnum():
+                        if len(order) == 3:
+                            msg = 'Order Number: {0}, Dealer Code: {1}'.format(order[1], order[2])
+                        else:
+                            msg = 'Order Number: {0}, Dealer Code: {1}, Email: {2}'.format(order[1], order[2], order[3])
+                        print(msg)
+                        print('Invalid Order.')
+                        continue
                     if len(o) == 3:
                         args.order_number = o[1]
                         args.dealer_code = o[2]
@@ -691,9 +712,15 @@ def main():
                         args.vin = ''
                         args.send_email = o[3]
                     else:
+                        if len(order) == 3:
+                            msg = 'Order Number: {0}, Dealer Code: {1}'.format(order[1], order[2])
+                        else:
+                            msg = 'Order Number: {0}, Dealer Code: {1}, Email: {2}'.format(order[1], order[2], order[3])
+                        print(msg)
                         print('Invalid Order.')
                         continue
                 else:
+                    print(', '.join(o))
                     print('Invalid Order.')
                     continue
                 q_in.put((copy.deepcopy(args), o, len(order_str_list)))
