@@ -162,16 +162,18 @@ def get_orders(file_name, new_orders):
     for l in lines:
         o = l.replace('\n', '').replace(' ', '').strip().split(',')
         if o[0] == 'vin':
-            if len(o) != 2 or len(o) != 3 or len(o[1]) != 17 or not o[1].isalnum():
-                print(', '.join(o))
+            if (len(o) != 2 and len(o) != 3) or len(o[1]) != 17 or not o[1].isalnum():
+                info = 'VIN, {0}'.format(', '.join(o[1:]))
+                print(info)
                 print('Invalid Order.\n')
-                send_email_invalid_order(', '.join(o), o[-1])
+                # send_email_invalid_order(info, o[-1])
                 continue
         elif o[0] == 'num':
-            if len(o) != 3 or len(o) != 4 or len(o[1]) != 4 or len(o[2]) != 6 or not o[1].isalnum() or not o[2].isalnum():
-                print(', '.join(o))
+            if (len(o) != 3 and len(o) != 4) or len(o[1]) != 4 or len(o[2]) != 6 or not o[1].isalnum() or not o[2].isalnum():
+                info = 'Order Number & Dealer Code, {0}'.format(', '.join(o[1:]))
+                print(info)
                 print('Invalid Order.\n')
-                send_email_invalid_order(', '.join(o), o[-1])
+                # send_email_invalid_order(info, o[-1])
                 continue
         else:
             print(', '.join(o))

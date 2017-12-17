@@ -73,17 +73,19 @@ def get_data_from_sheet(args, my_dirname):
         orders = []
         for row in values:
             if row[1] == 'VIN':
-                if len(row[1]) != 17 or not row[1].isalnum():
-                    print(', '.join(row))
+                if len(row[4]) != 17 or not row[4].isalnum():
+                    info = ', '.join(['VIN', row[4].upper().strip(), row[0].lower().strip()])
+                    print(info)
                     print('Invalid Order.\n')
-                    send_email_invalid_order(', '.join(row), row[-1])
+                    # send_email_invalid_order(info, row[0])
                     continue
                 orders.append(','.join(['vin', row[4].upper().strip(), row[0].lower().strip()]))
             else:
-                if len(o[1]) != 4 or len(o[2]) != 6 or not o[1].isalnum() or not o[2].isalnum():
-                    print(', '.join(row))
+                if len(row[2]) != 4 or len(row[3]) != 6 or not row[2].isalnum() or not row[3].isalnum():
+                    info = ', '.join(['Order Number & Dealer Code', row[2].upper().strip(), row[3].upper().strip(), row[0].lower().strip()])
+                    print(info)
                     print('Invalid Order.\n')
-                    send_email_invalid_order(', '.join(row), row[-1])
+                    # send_email_invalid_order(info, row[0])
                     continue
                 orders.append(','.join(['num', row[2].upper().strip(), row[3].upper().strip(), row[0].lower().strip()]))
 
@@ -98,6 +100,7 @@ def send_email_invalid_order(info, email):
     if not EMAIL_REGEX.match(email):
         return -1, 'Invalid email address.'
     print('send email for invalid order')
+    print(info)
     if not gmail_user or not gmail_pswd:
         return -1, 'Empty Gmail Username or Password'
     else:
