@@ -107,7 +107,7 @@ def send_email_invalid_order(info, email):
         email_msg = MIMEMultipart()
         email_msg['Subject'] = '[COTUS CHECKER] Invalid Information'
         email_msg['From'] = gmail_user
-        email_msg['To'] = email_to
+        email_msg['To'] = email
         email_msg['Date'] = formatdate(localtime=True)
         email_msg.attach(MIMEText(email_body))
 
@@ -115,7 +115,7 @@ def send_email_invalid_order(info, email):
             gmail_server = smtplib.SMTP_SSL('smtp.gmail.com', 465)
             gmail_server.ehlo()
             gmail_server.login(gmail_user, gmail_pswd)
-            gmail_server.sendmail(email_from, email_to, email_msg.as_string())
+            gmail_server.sendmail(email_from, email, email_msg.as_string())
             gmail_server.close()
             return 0, 'SUCCESS'
         except KeyboardInterrupt:
