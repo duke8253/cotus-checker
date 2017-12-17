@@ -161,7 +161,7 @@ def get_orders(file_name, new_orders):
     orders = []
     for l in lines:
         o = l.replace('\n', '').replace(' ', '').split(',')
-        o = list(map(strip, o))
+        o = list(map(str.strip, o))
         if o[0] == 'vin':
             if (len(o) != 2 and len(o) != 3) or len(o[1]) != 17 or not o[1].isalnum():
                 info = 'VIN, {0}'.format(', '.join(o[1:]))
