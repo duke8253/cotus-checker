@@ -13,6 +13,7 @@ from gmail_secret import gmail_user, gmail_pswd
 import httplib2
 import os
 import re
+import smtplib
 
 # If modifying these scopes, delete your previously saved credentials
 # at ~/.credentials/sheets.googleapis.com-cotus-checker.json
