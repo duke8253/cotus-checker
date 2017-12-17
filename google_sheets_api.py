@@ -78,7 +78,7 @@ def get_data_from_sheet(args, my_dirname):
                     info = ', '.join(['VIN', row[4].upper().strip(), row[0].lower().strip()])
                     print(info)
                     print('Invalid Order.\n')
-                    # send_email_invalid_order(info, row[0])
+                    send_email_invalid_order(info, row[0])
                     continue
                 orders.append(','.join(['vin', row[4].upper().strip(), row[0].lower().strip()]))
             else:
@@ -86,7 +86,7 @@ def get_data_from_sheet(args, my_dirname):
                     info = ', '.join(['Order Number & Dealer Code', row[2].upper().strip(), row[3].upper().strip(), row[0].lower().strip()])
                     print(info)
                     print('Invalid Order.\n')
-                    # send_email_invalid_order(info, row[0])
+                    send_email_invalid_order(info, row[0])
                     continue
                 orders.append(','.join(['num', row[2].upper().strip(), row[3].upper().strip(), row[0].lower().strip()]))
 
@@ -99,9 +99,8 @@ def get_data_from_sheet(args, my_dirname):
 
 def send_email_invalid_order(info, email):
     if not EMAIL_REGEX.match(email):
-        return -1, 'Invalid email address.'
-    print('send email for invalid order')
-    print(info)
+        return -1, 'Invalid email address for sending invalid information.'
+
     if not gmail_user or not gmail_pswd:
         return -1, 'Empty Gmail Username or Password'
     else:
