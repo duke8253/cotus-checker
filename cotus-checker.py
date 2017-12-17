@@ -23,6 +23,7 @@ from PIL import Image, ImageDraw, ImageFont
 from gmail_secret import gmail_user, gmail_pswd
 from oauth2client import tools
 from google_sheets_api import get_data_from_sheet
+from google_sheets_api import send_email_invalid_order
 import requests
 import textract
 import re
@@ -160,6 +161,23 @@ def get_orders(file_name, new_orders):
     orders = []
     for l in lines:
         o = l.replace('\n', '').replace(' ', '').strip().split(',')
+        if o[0] == 'vin':
+            if len(o) != 2 or len(o) != 3 or len(o[1]) != 17 or not o[1].isalnum():
+                print(', '.join(o))
+                print('Invalid Order.\n')
+                send_email_invalid_order(', '.join(o), o[-1])
+                continue
+        elif o[0] == 'num':
+            if len(o) != 3 or len(o) != 4 or len(o[1]) != 4 or len(o[2]) != 6 or not o[1].isalnum() or not o[2].isalnum():
+                print(', '.join(o))
+                print('Invalid Order.\n')
+                send_email_invalid_order(', '.join(o), o[-1])
+                continue
+        else:
+            print(', '.join(o))
+            print('Invalid Order.\n')
+            send_email_invalid_order(', '.join(o), o[-1])
+            continue
         for i in range(1, len(o) - 1):
             o[i] = o[i].upper()
         o[-1] = o[-1].lower()
@@ -171,13 +189,9 @@ def get_orders(file_name, new_orders):
         if o not in orders:
             orders.append(o)
 
-    if new_orders:
-        with open(file_name, 'w') as out_file:
-            for i in range(len(orders)):
-                out_file.write('{0}\n'.format(orders[i]))
-                orders[i] = orders[i].split(',')
-    else:
+    with open(file_name, 'w') as out_file:
         for i in range(len(orders)):
+            out_file.write('{0}\n'.format(orders[i]))
             orders[i] = orders[i].split(',')
 
     return orders
@@ -668,63 +682,28 @@ def main():
             orders = get_orders(args.file, get_data_from_sheet(args, my_dirname))
             for o in orders:
                 if o[0] == 'vin':
-                    if not o[1].isalnum():
-                        if len(order) == 2:
-                            msg = 'VIN: {0}'.format(order[1])
-                        else:
-                            msg = 'VIN: {0}, Email: {1}'.format(order[1], order[2])
-                        print(msg)
-                        print('Invalid Order.')
-                        continue
                     if len(o) == 2:
                         args.order_number = ''
                         args.dealer_code = ''
                         args.vin = o[1]
                         args.send_email = ''
-                    elif len(o) == 3:
+                    else:
                         args.order_number = ''
                         args.dealer_code = ''
                         args.vin = o[1]
                         args.send_email = o[2]
-                    else:
-                        if len(order) == 2:
-                            msg = 'VIN: {0}'.format(order[1])
-                        else:
-                            msg = 'VIN: {0}, Email: {1}'.format(order[1], order[2])
-                        print(msg)
-                        print('Invalid Order.')
-                        continue
-                elif o[0] == 'num':
-                    if not o[1].isalnum() or not o[2].isalnum():
-                        if len(order) == 3:
-                            msg = 'Order Number: {0}, Dealer Code: {1}'.format(order[1], order[2])
-                        else:
-                            msg = 'Order Number: {0}, Dealer Code: {1}, Email: {2}'.format(order[1], order[2], order[3])
-                        print(msg)
-                        print('Invalid Order.')
-                        continue
+                else:
                     if len(o) == 3:
                         args.order_number = o[1]
                         args.dealer_code = o[2]
                         args.vin = ''
                         args.send_email = ''
-                    elif len(o) == 4:
+                    else:
                         args.order_number = o[1]
                         args.dealer_code = o[2]
                         args.vin = ''
                         args.send_email = o[3]
-                    else:
-                        if len(order) == 3:
-                            msg = 'Order Number: {0}, Dealer Code: {1}'.format(order[1], order[2])
-                        else:
-                            msg = 'Order Number: {0}, Dealer Code: {1}, Email: {2}'.format(order[1], order[2], order[3])
-                        print(msg)
-                        print('Invalid Order.')
-                        continue
-                else:
-                    print(', '.join(o))
-                    print('Invalid Order.')
-                    continue
+
                 q_in.put((copy.deepcopy(args), o, len(order_str_list)))
                 order_str_list.append('')
             for t in threads:

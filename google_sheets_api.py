@@ -5,14 +5,22 @@ from apiclient import discovery
 from oauth2client import client
 from oauth2client import tools
 from oauth2client.file import Storage
+from email.mime.application import MIMEApplication
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.utils import formatdate
+from gmail_secret import gmail_user, gmail_pswd
 import httplib2
 import os
+import re
 
 # If modifying these scopes, delete your previously saved credentials
 # at ~/.credentials/sheets.googleapis.com-cotus-checker.json
 SCOPES = 'https://www.googleapis.com/auth/spreadsheets.readonly'
 CLIENT_SECRET_FILE = 'client_secret.json'
 APPLICATION_NAME = 'Google Sheets API for Python'
+
+EMAIL_REGEX = re.compile(r"[^@]+@[^@]+\.[^@]+")
 
 
 def get_credentials(args, my_dirname):
@@ -64,8 +72,18 @@ def get_data_from_sheet(args, my_dirname):
         orders = []
         for row in values:
             if row[1] == 'VIN':
+                if len(row[1]) != 17 or not row[1].isalnum():
+                    print(', '.join(row))
+                    print('Invalid Order.\n')
+                    send_email_invalid_order(', '.join(row), row[-1])
+                    continue
                 orders.append(','.join(['vin', row[4].upper().strip(), row[0].lower().strip()]))
             else:
+                if len(o[1]) != 4 or len(o[2]) != 6 or not o[1].isalnum() or not o[2].isalnum():
+                    print(', '.join(row))
+                    print('Invalid Order.\n')
+                    send_email_invalid_order(', '.join(row), row[-1])
+                    continue
                 orders.append(','.join(['num', row[2].upper().strip(), row[3].upper().strip(), row[0].lower().strip()]))
 
         row_num += len(values)
@@ -73,3 +91,36 @@ def get_data_from_sheet(args, my_dirname):
         return orders
 
     return []
+
+
+def send_email_invalid_order(info, email):
+    if not EMAIL_REGEX.match(email):
+        return -1, 'Invalid email address.'
+    print('send email for invalid order')
+    if not gmail_user or not gmail_pswd:
+        return -1, 'Empty Gmail Username or Password'
+    else:
+        email_from = gmail_user
+        email_body = 'The information you entered is invalid.\nPlease make sure it works on the actual COTUS website (http://www.cotus.ford.com) before you register with the auto checker.\n\n'
+        email_body += 'The information you entered: {0}'.format(info)
+
+        email_msg = MIMEMultipart()
+        email_msg['Subject'] = '[COTUS CHECKER] Invalid Information'
+        email_msg['From'] = gmail_user
+        email_msg['To'] = email_to
+        email_msg['Date'] = formatdate(localtime=True)
+        email_msg.attach(MIMEText(email_body))
+
+        try:
+            gmail_server = smtplib.SMTP_SSL('smtp.gmail.com', 465)
+            gmail_server.ehlo()
+            gmail_server.login(gmail_user, gmail_pswd)
+            gmail_server.sendmail(email_from, email_to, email_msg.as_string())
+            gmail_server.close()
+            return 0, 'SUCCESS'
+        except KeyboardInterrupt:
+            exit(2)
+        except (smtplib.SMTPException, smtplib.SMTPServerDisconnected, smtplib.SMTPResponseException,
+                smtplib.SMTPSenderRefused, smtplib.SMTPRecipientsRefused, smtplib.SMTPDataError, smtplib.SMTPConnectError,
+                smtplib.SMTPHeloError, smtplib.SMTPNotSupportedError, smtplib.SMTPAuthenticationError):
+            return -1, 'FAIL'
