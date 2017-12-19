@@ -65,6 +65,7 @@ order_str_list = []
 
 GET_TIMEOUT = 5
 GET_RETRY = 3
+COTUS_RETRY = 3
 
 DIR_INFO = 'info'
 DIR_IMAGE = 'image'
@@ -610,12 +611,18 @@ def check_order(q_in, q_out):
         args, order, list_id = q_in.get()
         err = -1
         msg = ''
+        stop_flag = False
         for i in range(len(COTUS_URL)):
-            url = COTUS_URL[i]
-            data = get_data(args, order[0], url=url)
-            err, msg = format_order_info(data, args.vehicle_summary, args.send_email, url, args.window_sticker, args.generate_image)
-            if err >= 0:
+            if stop_flag:
                 break
+            url = COTUS_URL[i]
+            for j in range(COTUS_RETRY):
+                if stop_flag:
+                    break
+                data = get_data(args, order[0], url=url)
+                err, msg = format_order_info(data, args.vehicle_summary, args.send_email, url, args.window_sticker, args.generate_image)
+                if err >= 0:
+                    stop_flag = True
         if err == 1:
             q_out.put(list_id)
         elif err == -1:
@@ -725,18 +732,24 @@ def main():
     else:
         data = None
         msg = ''
+        stop_flag = False
         for i in range(len(COTUS_URL)):
-            url = COTUS_URL[i]
-            if args.vin:
-                data = get_data(args, 'vin', url=url)
-            elif args.order_number and args.dealer_code and args.last_name:
-                data = get_data(args, url=url)
-            else:
-                print('Invalid input!')
-                exit(1)
-            err, msg = format_order_info(data, args.vehicle_summary, args.send_email, url, args.window_sticker, args.generate_image)
-            if err >= 0:
+            if stop_flag:
                 break
+            url = COTUS_URL[i]
+            for j in range(COTUS_RETRY):
+                if stop_flag:
+                    break
+                if args.vin:
+                    data = get_data(args, 'vin', url=url)
+                elif args.order_number and args.dealer_code and args.last_name:
+                    data = get_data(args, url=url)
+                else:
+                    print('Invalid input!')
+                    exit(1)
+                err, msg = format_order_info(data, args.vehicle_summary, args.send_email, url, args.window_sticker, args.generate_image)
+                if err >= 0:
+                    stop_flag = True
         print(msg)
 
 
