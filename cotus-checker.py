@@ -90,7 +90,7 @@ def get_requests(url, payload=''):
             else:
                 r = requests.get(url, timeout=GET_TIMEOUT)
             return 0, r
-        except requests.exceptions.Timeout:
+        except (requests.exceptions.Timeout, requests.exceptions.ConnectionError):
             pass
     return -1, '{0}SERVER TIMEOUT{1}'.format(RED, RESET)
 
