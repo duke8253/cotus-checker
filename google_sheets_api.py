@@ -14,6 +14,8 @@ import httplib2
 import os
 import re
 import smtplib
+import oauth2client
+import json
 
 # If modifying these scopes, delete your previously saved credentials
 # at ~/.credentials/sheets.googleapis.com-cotus-checker.json
@@ -42,10 +44,13 @@ def get_credentials(args, my_dirname):
     store = Storage(credential_path)
     credentials = store.get()
     if not credentials or credentials.invalid:
-        flow = client.flow_from_clientsecrets(CLIENT_SECRET_FILE, SCOPES)
-        flow.user_agent = APPLICATION_NAME
-        credentials = tools.run_flow(flow, store, args)
-        print('Storing credentials to ' + credential_path)
+        try:
+            flow = client.flow_from_clientsecrets(CLIENT_SECRET_FILE, SCOPES)
+            flow.user_agent = APPLICATION_NAME
+            credentials = tools.run_flow(flow, store, args)
+            print('Storing credentials to ' + credential_path)
+        except (oauth2client.clientsecrets.InvalidClientSecretsError, json.decoder.JSONDecodeError):
+            pass
     return credentials
 
 
@@ -60,6 +65,9 @@ def get_data_from_sheet(args, my_dirname):
         row_num = int(open(file_name, 'r').read())
 
     credentials = get_credentials(args, my_dirname)
+    if credentials is None:
+        return []
+
     http = credentials.authorize(httplib2.Http())
     discovery_url = ('https://sheets.googleapis.com/$discovery/rest?version=v4')
     service = discovery.build('sheets', 'v4', http=http, discoveryServiceUrl=discovery_url)
