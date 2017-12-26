@@ -674,7 +674,14 @@ def main():
         shutil.rmtree(DIR_WINDOW_STICKER, ignore_errors=True)
         os.mkdir(DIR_WINDOW_STICKER)
 
-    logging.basicConfig(filename='logs.log', level=logging.DEBUG, format='[%(asctime)s] %(message)s')
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.DEBUG)
+
+    log_handler = logging.FileHandler('logs.log')
+    log_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    log_handler.setLevel(logging.DEBUG)
+    log_handler.setFormatter(log_formatter)
+    logger.addHandler(log_handler)
 
     parser = argparse.ArgumentParser(parents=[tools.argparser])
     parser.add_argument('-o', '--order-number', type=str, help='order number of the car', dest='order_number')
@@ -733,7 +740,7 @@ def main():
             for s in order_str_list:
                 print(s)
 
-            logging.info('Total Orders: {0}, Query Success: {1}'.format(len(orders), sum(list(q_count.queue))))
+            logger.info('Total Orders: {0}, Query Success: {1}'.format(len(orders), sum(list(q_count.queue))))
 
             if args.remove_delivered:
                 remove_list = list(q_out.queue)
