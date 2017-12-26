@@ -36,6 +36,7 @@ import threading
 import copy
 import hashlib
 import shutil
+import time
 
 RED = '\033[1;31m'
 GREEN = '\033[1;32m'
@@ -66,6 +67,7 @@ order_str_list = []
 GET_TIMEOUT = 5
 GET_RETRY = 3
 COTUS_RETRY = 3
+COTUS_WAIT = 3
 
 DIR_INFO = 'info'
 DIR_IMAGE = 'image'
@@ -428,7 +430,7 @@ def check_state(cur_data, send_email, ws_err, generate_image):
     :return:
     :rtype:
     """
-    file_name = os.path.join(DIR_INFO, '{0}.json'.format(cur_data['order_vin']))
+    file_name = os.path.join(DIR_INFO, '{0}_{1}.json'.format(cur_data['order_vin'], send_email))
     ws_name = os.path.join(DIR_WINDOW_STICKER, '{0}.pdf'.format(cur_data['order_vin']))
 
     initial_check = True
@@ -623,6 +625,8 @@ def check_order(q_in, q_out):
                 err, msg = format_order_info(data, args.vehicle_summary, args.send_email, url, args.window_sticker, args.generate_image)
                 if err >= 0:
                     stop_flag = True
+                else:
+                    time.sleep(COTUS_WAIT)
         if err == 1:
             q_out.put(list_id)
         elif err == -1:
@@ -750,6 +754,8 @@ def main():
                 err, msg = format_order_info(data, args.vehicle_summary, args.send_email, url, args.window_sticker, args.generate_image)
                 if err >= 0:
                     stop_flag = True
+                else:
+                    time.sleep(COTUS_WAIT)
         print(msg)
 
 
