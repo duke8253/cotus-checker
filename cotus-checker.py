@@ -37,6 +37,7 @@ import copy
 import hashlib
 import shutil
 import time
+import logging
 
 RED = '\033[1;31m'
 GREEN = '\033[1;32m'
@@ -597,7 +598,7 @@ def report_with_email(email_to, edd='', state='', vin='', initial_check=False, s
             return -1, '{0}FAIL{1}'.format(RED, RESET)
 
 
-def check_order(q_in, q_out):
+def check_order(q_in, q_out, q_count):
     """
 
     :param q_in:
@@ -609,6 +610,7 @@ def check_order(q_in, q_out):
     """
     global order_str_list
 
+    count = 0
     while not q_in.empty():
         args, order, list_id = q_in.get()
         err = -1
@@ -625,6 +627,7 @@ def check_order(q_in, q_out):
                 err, msg = format_order_info(data, args.vehicle_summary, args.send_email, url, args.window_sticker, args.generate_image)
                 if err >= 0:
                     stop_flag = True
+                    count += 1
                 else:
                     time.sleep(COTUS_WAIT)
         if err == 1:
@@ -643,6 +646,7 @@ def check_order(q_in, q_out):
         the_lock.acquire()
         order_str_list[list_id] = msg
         the_lock.release()
+    q_count.put(count)
 
 
 def main():
@@ -670,6 +674,8 @@ def main():
         shutil.rmtree(DIR_WINDOW_STICKER, ignore_errors=True)
         os.mkdir(DIR_WINDOW_STICKER)
 
+    logging.basicConfig(filename='logs.log', level=logging.DEBUG, format='[%(asctime)s] %(message)s')
+
     parser = argparse.ArgumentParser(parents=[tools.argparser])
     parser.add_argument('-o', '--order-number', type=str, help='order number of the car', dest='order_number')
     parser.add_argument('-d', '--dealer-code', type=str, help='dealer code of the order', dest='dealer_code')
@@ -690,7 +696,8 @@ def main():
         else:
             q_in = Queue()
             q_out = Queue()
-            threads = [threading.Thread(target=check_order, args=(q_in, q_out)) for i in range(10)]
+            q_count = Queue()
+            threads = [threading.Thread(target=check_order, args=(q_in, q_out, q_count)) for i in range(10)]
 
             orders = get_orders(args.file, get_data_from_sheet(args, my_dirname))
             for o in orders:
@@ -725,6 +732,8 @@ def main():
                 t.join()
             for s in order_str_list:
                 print(s)
+
+            logging.info('Total Orders: {0}, Query Success: {1}'.format(len(orders), sum(list(q_count.queue))))
 
             if args.remove_delivered:
                 remove_list = list(q_out.queue)
