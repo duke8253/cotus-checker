@@ -674,7 +674,7 @@ def main():
         shutil.rmtree(DIR_WINDOW_STICKER, ignore_errors=True)
         os.mkdir(DIR_WINDOW_STICKER)
 
-    logger = logging.getLogger(__name__)
+    logger = logging.getLogger('COTUS Checker')
     logger.setLevel(logging.DEBUG)
 
     log_handler = logging.FileHandler('logs.log')
