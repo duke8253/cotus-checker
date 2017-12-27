@@ -139,5 +139,36 @@ def send_email_invalid_order(info, email_addr):
 
 
 def send_email_new_order(info, email_addr):
-    print(info, email_addr)
+    if not EMAIL_REGEX.match(email_addr):
+        return -1, 'Invalid email address for sending invalid information.'
+
+    if not gmail_user or not gmail_pswd:
+        return -1, 'Empty Gmail Username or Password'
+    else:
+        email_from = gmail_user
+        email_body = 'The information you entered has been recorded.\nCOTUS Checker will start checking your order hourly and send you updates if there are any.\n'
+        email_body += 'You will receive an email that says "Initial Check" in the title when COTUS Checker finds your order for the first time.\n'
+        email_body += 'You will not be receiving emails if COTUS Checker cannot find your order on COTUS.\n\n'
+        email_body += 'The information you entered: {0}'.format(info)
+
+        email_msg = MIMEMultipart()
+        email_msg['Subject'] = '[COTUS CHECKER] Information Recorded'
+        email_msg['From'] = gmail_user
+        email_msg['To'] = email_addr
+        email_msg['Date'] = formatdate(localtime=True)
+        email_msg.attach(MIMEText(email_body))
+
+        try:
+            gmail_server = smtplib.SMTP_SSL('smtp.gmail.com', 465)
+            gmail_server.ehlo()
+            gmail_server.login(gmail_user, gmail_pswd)
+            gmail_server.sendmail(email_from, email_addr, email_msg.as_string())
+            gmail_server.close()
+            return 0, 'SUCCESS'
+        except KeyboardInterrupt:
+            exit(2)
+        except (smtplib.SMTPException, smtplib.SMTPServerDisconnected, smtplib.SMTPResponseException,
+                smtplib.SMTPSenderRefused, smtplib.SMTPRecipientsRefused, smtplib.SMTPDataError, smtplib.SMTPConnectError,
+                smtplib.SMTPHeloError, smtplib.SMTPNotSupportedError, smtplib.SMTPAuthenticationError):
+            return -1, 'FAIL'
     return
