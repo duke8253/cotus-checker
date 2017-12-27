@@ -196,12 +196,13 @@ def get_orders(file_name, new_orders=[]):
     for o in new_orders:
         if o not in orders:
             orders.append(o)
+            o = o.split(',')
             if o[0] == 'vin':
-                info = 'VIN, {0}'.format(o.replace(',', ', '))
-                send_email_new_order(info, o.split(',')[-1])
+                info = 'VIN, {0}'.format(', '.join(o[1:]))
+                send_email_new_order(info, o[-1])
             elif o[0] == 'num':
-                info = 'Order Number & Dealer Code, {0}'.format(o.replace(',', ', '))
-                send_email_new_order(info, o.split(',')[-1])
+                info = 'Order Number & Dealer Code, {0}'.format(', '.join(o[1:]))
+                send_email_new_order(info, o[-1])
 
     with open(file_name, 'w') as out_file:
         for i in range(len(orders)):
