@@ -98,7 +98,7 @@ def get_requests(url, payload=''):
     return -1, '{0}SERVER TIMEOUT{1}'.format(RED, RESET)
 
 
-def get_window_sticker(vin):
+def get_window_sticker(vin, email_addr):
     """
     Try to fetch the window sticker.
 
@@ -107,13 +107,15 @@ def get_window_sticker(vin):
     :return: error number and a message
     :rtype: int, str
     """
-    file_name = os.path.join(DIR_WINDOW_STICKER, '{0}.pdf'.format(vin))
+    if email_addr:
+        file_name = os.path.join(DIR_WINDOW_STICKER, '{0}_{1}.pdf'.format(vin, email_addr))
+    else:
+        file_name = os.path.join(DIR_WINDOW_STICKER, '{0}.pdf'.format(vin))
     hash_old = hashlib.sha256()
     sha256_old = ''
 
     if os.path.isfile(file_name):
-        with open(file_name, 'rb') as in_file:
-            hash_old.update(in_file.read())
+        hash_old.update(open(file_name, 'rb').read())
         sha256_old = hash_old.hexdigest()
 
     temp_name = os.path.join(DIR_WINDOW_STICKER, '{0}.pdf'.format(next(tempfile._get_candidate_names())))
@@ -159,8 +161,7 @@ def get_orders(file_name, new_orders):
     :return: a list of list of strings of the order information
     :rtype: list[list[str]]
     """
-    with open(file_name, 'r') as in_file:
-        lines = in_file.readlines()
+    lines = open(file_name, 'r').readlines()
 
     orders = []
     for l in lines:
@@ -373,7 +374,7 @@ def format_order_info(data, vehicle_summary=False, send_email='', url=COTUS_URL[
         ws_err = -1
         ws_str = '{0}N/A{1}'.format(RED, RESET)
         if window_sticker:
-            ws_err, ws_str = get_window_sticker(order_info['order_vin'])
+            ws_err, ws_str = get_window_sticker(order_info['order_vin'], send_email)
 
         email_sent = '{0}N/A{1}'.format(RED, RESET)
         if send_email:
@@ -432,7 +433,7 @@ def check_state(cur_data, send_email, ws_err, generate_image):
     :rtype:
     """
     file_name = os.path.join(DIR_INFO, '{0}_{1}.json'.format(cur_data['order_vin'], send_email))
-    ws_name = os.path.join(DIR_WINDOW_STICKER, '{0}.pdf'.format(cur_data['order_vin']))
+    ws_name = os.path.join(DIR_WINDOW_STICKER, '{0}_{1}.pdf'.format(cur_data['order_vin'], send_email))
 
     initial_check = True
     edd_changed = False
@@ -568,19 +569,17 @@ def report_with_email(email_to, edd='', state='', vin='', initial_check=False, s
         email_msg.attach(MIMEText(email_body))
 
         if send_ws:
-            base_name = '{0}.pdf'.format(vin)
-            file_name = os.path.join(DIR_WINDOW_STICKER, base_name)
-            with open(file_name, 'rb') as in_file:
-                attachment = MIMEApplication(in_file.read(), Name=base_name)
-            attachment['Content-Disposition'] = 'attachment; filename="{0}"'.format(base_name)
+            attachment_name = '{0}.pdf'.format(vin)
+            file_name = os.path.join(DIR_WINDOW_STICKER, '{0}_{1}.pdf'.format(vin, email_to))
+            attachment = MIMEApplication(open(file_name, 'rb').read())
+            attachment.add_header('Content-Disposition', 'attachment; filename="{0}"'.format(attachment_name))
             email_msg.attach(attachment)
 
         if not img_err:
-            base_name = '{0}.png'.format(vin)
-            file_name = os.path.join(DIR_IMAGE, base_name)
-            with open(file_name, 'rb') as in_file:
-                attachment = MIMEApplication(in_file.read(), Name=base_name)
-            attachment['Content-Disposition'] = 'attachment; filename="{0}"'.format(base_name)
+            attachment_name = '{0}.png'.format(vin)
+            file_name = os.path.join(DIR_IMAGE, attachment_name)
+            attachment = MIMEApplication(open(file_name, 'rb').read())
+            attachment.add_header('Content-Disposition', 'attachment; filename="{0}"'.format(attachment_name))
             email_msg.attach(attachment)
 
         try:
@@ -674,15 +673,6 @@ def main():
         shutil.rmtree(DIR_WINDOW_STICKER, ignore_errors=True)
         os.mkdir(DIR_WINDOW_STICKER)
 
-    logger = logging.getLogger('COTUS Checker')
-    logger.setLevel(logging.DEBUG)
-
-    log_handler = logging.FileHandler('logs.log')
-    log_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    log_handler.setLevel(logging.DEBUG)
-    log_handler.setFormatter(log_formatter)
-    logger.addHandler(log_handler)
-
     parser = argparse.ArgumentParser(parents=[tools.argparser])
     parser.add_argument('-o', '--order-number', type=str, help='order number of the car', dest='order_number')
     parser.add_argument('-d', '--dealer-code', type=str, help='dealer code of the order', dest='dealer_code')
@@ -697,6 +687,14 @@ def main():
     args = parser.parse_args()
 
     if args.file:
+        logger = logging.getLogger('COTUS Checker')
+        logger.setLevel(logging.DEBUG)
+        log_handler = logging.FileHandler('logs.log')
+        log_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        log_handler.setLevel(logging.DEBUG)
+        log_handler.setFormatter(log_formatter)
+        logger.addHandler(log_handler)
+
         if not os.path.isfile(args.file):
             print('Invalid VIN file.')
             exit(1)
