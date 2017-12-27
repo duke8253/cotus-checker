@@ -24,6 +24,7 @@ from gmail_secret import gmail_user, gmail_pswd
 from oauth2client import tools
 from google_sheets_api import get_data_from_sheet
 from google_sheets_api import send_email_invalid_order
+from google_sheets_api import send_email_new_order
 import requests
 import textract
 import re
@@ -150,7 +151,7 @@ def get_window_sticker(vin, email_addr):
         return -1, '{0}NOT FOUND{1}'.format(RED, RESET)
 
 
-def get_orders(file_name, new_orders):
+def get_orders(file_name, new_orders=[]):
     """
     Get orders from the file, combine with new orders from Google Sheet.
 
@@ -195,6 +196,12 @@ def get_orders(file_name, new_orders):
     for o in new_orders:
         if o not in orders:
             orders.append(o)
+            if o[0] == 'vin':
+                info = 'VIN, {0}'.format(o.replace(',', ', '))
+                send_email_new_order(info, o.split(',')[-1])
+            elif o[0] == 'num':
+                info = 'Order Number & Dealer Code, {0}'.format(o.replace(',', ', '))
+                send_email_new_order(info, o.split(',')[-1])
 
     with open(file_name, 'w') as out_file:
         for i in range(len(orders)):
@@ -342,25 +349,20 @@ def get_car_image(order_info):
     return -1
 
 
-def format_order_info(data, vehicle_summary=False, send_email='', url=COTUS_URL[0], window_sticker=False, generate_image=False):
+def format_order_info(data, args, url=COTUS_URL[0]):
     """
     Format the order info data into a readable string.
 
     :param data:
     :type data:
-    :param vehicle_summary:
-    :type vehicle_summary:
-    :param send_email:
-    :type send_email:
     :param url:
     :type url:
-    :param window_sticker:
-    :type window_sticker:
-    :param generate_image:
-    :type generate_image:
+    :param args:
+    :type args:
     :return:
     :rtype:
     """
+
     try:
         error_msg = re.search(u'class="top-level-error enabled">(.*?)</p>', data).group(1).strip() + '\n'
         return -1, error_msg
@@ -373,12 +375,12 @@ def format_order_info(data, vehicle_summary=False, send_email='', url=COTUS_URL[
 
         ws_err = -1
         ws_str = '{0}N/A{1}'.format(RED, RESET)
-        if window_sticker:
-            ws_err, ws_str = get_window_sticker(order_info['order_vin'], send_email)
+        if args.window_sticker:
+            ws_err, ws_str = get_window_sticker(order_info['order_vin'], args.send_email)
 
         email_sent = '{0}N/A{1}'.format(RED, RESET)
-        if send_email:
-            email_sent = check_state(order_info, send_email, ws_err, generate_image)
+        if args.send_email:
+            email_sent = check_state(order_info, args.send_email, ws_err, args.generate_image)
 
         order_str = 'Order Information:\n'
         order_str += '  {0: <21}{1}{2}{3}\n'.format('Vehicle Name:', GREEN, order_info['vehicle_name'], RESET)
@@ -387,27 +389,24 @@ def format_order_info(data, vehicle_summary=False, send_email='', url=COTUS_URL[
         order_str += '  {0: <21}{1}{2}{3}\n'.format('Dealer Code:', WHITE, order_info['dealer_code'], RESET)
         order_str += '  {0: <21}{1}{2}{3}\n'.format('VIN:', WHITE, order_info['order_vin'], RESET)
         order_str += '  {0: <21}{1}{2}{3}\n'.format('Dealer Name:', BLUE, order_info['dealer_name'], RESET)
-        order_str += '  {0: <21}{1}{2}{3}\n'.format('Estimated Delivery:', CYAN,
-                                                    'N/A' if not order_info['order_edd'] else order_info['order_edd'],
-                                                    RESET)
+        order_str += '  {0: <21}{1}{2}{3}\n'.format('Estimated Delivery:', CYAN, 'N/A' if not order_info['order_edd'] else order_info['order_edd'], RESET)
         order_str += '  {0: <21}{1}{2}{3}\n'.format('Current State:', RED, order_info['current_state'], RESET)
 
         for i in range(5):
             try:
-                order_str += '  {0: <21}{1}Completed On {2}{3}{4}\n'.format(order_states[i], PURPLE, GREEN,
-                                                                            order_info['state_dates'][i], RESET)
+                order_str += '  {0: <21}{1}Completed On {2}{3}{4}\n'.format(order_states[i], PURPLE, GREEN, order_info['state_dates'][i], RESET)
             except IndexError:
                 order_str += '  {0: <21}{1}{2}{3}\n'.format(order_states[i], PURPLE, 'N/A', RESET)
 
         order_str += '  {0: <21}{1}{2}{3}\n'.format('Source:', YELLOW, url, RESET)
 
-        if window_sticker:
+        if args.window_sticker:
             order_str += '  {0: <21}{1}\n'.format('Window Sticker:', ws_str)
 
-        if send_email:
+        if args.send_email:
             order_str += '  {0: <21}{1}\n'.format('Email Sent:', email_sent)
 
-        if vehicle_summary:
+        if args.vehicle_summary:
             order_str += '  Vehicle Summary:\n'
             for each in order_info['vehicle_summary']:
                 order_str += '    {0}\n'.format(each)
@@ -446,7 +445,10 @@ def check_state(cur_data, send_email, ws_err, generate_image):
 
     pre_data = None
     if os.path.isfile(file_name):
-        pre_data = json.load(open(file_name, 'r'))
+        try:
+            pre_data = json.load(open(file_name, 'r'))
+        except json.decoder.JSONDecodeError:
+            pre_data = None
 
     if pre_data is not None:
         pre_edd = pre_data['order_edd']
@@ -610,11 +612,13 @@ def check_order(q_in, q_out, q_count):
     global order_str_list
 
     count = 0
+
     while not q_in.empty():
         args, order, list_id = q_in.get()
         err = -1
         msg = ''
         stop_flag = False
+
         for i in range(len(COTUS_URL)):
             if stop_flag:
                 break
@@ -623,12 +627,13 @@ def check_order(q_in, q_out, q_count):
                 if stop_flag:
                     break
                 data = get_data(args, order[0], url=url)
-                err, msg = format_order_info(data, args.vehicle_summary, args.send_email, url, args.window_sticker, args.generate_image)
+                err, msg = format_order_info(data, args, url)
                 if err >= 0:
                     stop_flag = True
                     count += 1
                 else:
                     time.sleep(COTUS_WAIT)
+
         if err == 1:
             q_out.put(list_id)
         elif err == -1:
@@ -642,9 +647,11 @@ def check_order(q_in, q_out, q_count):
                     msg = 'Order Number: {0}, Dealer Code: {1}\n{2}'.format(order[1], order[2], msg)
                 else:
                     msg = 'Order Number: {0}, Dealer Code: {1}, Email: {2}\n{3}'.format(order[1], order[2], order[3], msg)
+
         the_lock.acquire()
         order_str_list[list_id] = msg
         the_lock.release()
+
     q_count.put(count)
 
 
@@ -765,7 +772,7 @@ def main():
                 else:
                     print('Invalid input!')
                     exit(1)
-                err, msg = format_order_info(data, args.vehicle_summary, args.send_email, url, args.window_sticker, args.generate_image)
+                err, msg = format_order_info(data, args, url)
                 if err >= 0:
                     stop_flag = True
                 else:

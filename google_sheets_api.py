@@ -105,8 +105,8 @@ def get_data_from_sheet(args, my_dirname):
     return []
 
 
-def send_email_invalid_order(info, email):
-    if not EMAIL_REGEX.match(email):
+def send_email_invalid_order(info, email_addr):
+    if not EMAIL_REGEX.match(email_addr):
         return -1, 'Invalid email address for sending invalid information.'
 
     if not gmail_user or not gmail_pswd:
@@ -119,7 +119,7 @@ def send_email_invalid_order(info, email):
         email_msg = MIMEMultipart()
         email_msg['Subject'] = '[COTUS CHECKER] Invalid Information'
         email_msg['From'] = gmail_user
-        email_msg['To'] = email
+        email_msg['To'] = email_addr
         email_msg['Date'] = formatdate(localtime=True)
         email_msg.attach(MIMEText(email_body))
 
@@ -127,7 +127,7 @@ def send_email_invalid_order(info, email):
             gmail_server = smtplib.SMTP_SSL('smtp.gmail.com', 465)
             gmail_server.ehlo()
             gmail_server.login(gmail_user, gmail_pswd)
-            gmail_server.sendmail(email_from, email, email_msg.as_string())
+            gmail_server.sendmail(email_from, email_addr, email_msg.as_string())
             gmail_server.close()
             return 0, 'SUCCESS'
         except KeyboardInterrupt:
@@ -136,3 +136,8 @@ def send_email_invalid_order(info, email):
                 smtplib.SMTPSenderRefused, smtplib.SMTPRecipientsRefused, smtplib.SMTPDataError, smtplib.SMTPConnectError,
                 smtplib.SMTPHeloError, smtplib.SMTPNotSupportedError, smtplib.SMTPAuthenticationError):
             return -1, 'FAIL'
+
+
+def send_email_new_order(info, email_addr):
+    print(info, email_addr)
+    return
