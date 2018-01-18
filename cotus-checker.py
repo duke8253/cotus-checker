@@ -129,24 +129,29 @@ def get_window_sticker(vin, email_addr):
             return 0, '{0}FOUND BEFORE{1}'.format(YELLOW, RESET)
 
     open(temp_name, 'wb').write(r.content)
-    text = textract.process(temp_name).decode('utf-8')
 
-    if 'BLEND' in text:
-        hash_new = hashlib.sha256()
-        hash_new.update(r.content)
-        sha256_new = hash_new.hexdigest()
-        if sha256_old:
-            if sha256_new != sha256_old:
-                os.remove(file_name)
-                os.rename(temp_name, file_name)
-                return 2, '{0}UPDATED{1}'.format(GREEN, RESET)
+    try:
+        text = textract.process(temp_name).decode('utf-8')
+        if 'BLEND' in text:
+            hash_new = hashlib.sha256()
+            hash_new.update(r.content)
+            sha256_new = hash_new.hexdigest()
+            if sha256_old:
+                if sha256_new != sha256_old:
+                    os.remove(file_name)
+                    os.rename(temp_name, file_name)
+                    return 2, '{0}UPDATED{1}'.format(GREEN, RESET)
+                else:
+                    os.remove(temp_name)
+                    return 0, '{0}FOUND BEFORE{1}'.format(YELLOW, RESET)
             else:
-                os.remove(temp_name)
-                return 0, '{0}FOUND BEFORE{1}'.format(YELLOW, RESET)
+                os.rename(temp_name, file_name)
+                return 1, '{0}RELEASED{1}'.format(GREEN, RESET)
         else:
-            os.rename(temp_name, file_name)
-            return 1, '{0}RELEASED{1}'.format(GREEN, RESET)
-    else:
+            os.remove(temp_name)
+            return -1, '{0}NOT FOUND{1}'.format(RED, RESET)
+    except (textract.exceptions.ShellError, TypeError):
+        print('Faild to parse pdf {0} {1} {2}\n'.format(temp_name, vin, email_addr))
         os.remove(temp_name)
         return -1, '{0}NOT FOUND{1}'.format(RED, RESET)
 
