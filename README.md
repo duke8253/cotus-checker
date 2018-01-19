@@ -6,5 +6,5 @@ Also supports reading in a text file with VIN on each line, and check every one 
 
 Note:
 - Requires `requests` library (http://docs.python-requests.org).
-- Requires `textract` library (http://textract.readthedocs.io).
+- Requires `PyPDF2` library (https://pythonhosted.org/PyPDF2).
 - Requires `google-api-python-client` library (https://developers.google.com/api-client-library/python).
