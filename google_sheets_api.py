@@ -81,6 +81,8 @@ def get_data_from_sheet(args, my_dirname):
         orders = []
         for row in values:
             row = list(map(str.strip, row))
+            for i in range(len(row)):
+                row[i] = row[i].replace('[', '').replace(']', '')
             if row[1] == 'VIN':
                 if len(row[4]) != 17 or not row[4].isalnum():
                     info = ', '.join(['VIN', row[4].upper().strip(), row[0].lower().strip()])
