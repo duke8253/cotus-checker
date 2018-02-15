@@ -703,16 +703,19 @@ def check_order(q_in, q_out, q_count):
 
 def main():
     """
+    The main function.
 
-    :return:
-    :rtype:
+    :return: error number
+    :rtype: int
     """
     global order_str_list, DIR_INFO, DIR_IMAGE, DIR_WINDOW_STICKER
 
+    # Get the path of the file, extract the directory path from it, and set the work directory to it.
     my_abspath = os.path.abspath(__file__)
     my_dirname = os.path.dirname(my_abspath)
     os.chdir(my_dirname)
 
+    # Setup all the other directories needed, create them if necessary.
     DIR_INFO = os.path.join(my_dirname, DIR_INFO)
     DIR_IMAGE = os.path.join(my_dirname, DIR_IMAGE)
     DIR_WINDOW_STICKER = os.path.join(my_dirname, DIR_WINDOW_STICKER)
@@ -726,6 +729,7 @@ def main():
         shutil.rmtree(DIR_WINDOW_STICKER, ignore_errors=True)
         os.mkdir(DIR_WINDOW_STICKER)
 
+    # setup the arguments
     parser = argparse.ArgumentParser(parents=[tools.argparser])
     parser.add_argument('-o', '--order-number', type=str, help='order number of the car', dest='order_number')
     parser.add_argument('-d', '--dealer-code', type=str, help='dealer code of the order', dest='dealer_code')
@@ -740,24 +744,35 @@ def main():
     args = parser.parse_args()
 
     if args.file:
-        logger = logging.getLogger('COTUS Checker')
-        logger.setLevel(logging.DEBUG)
-        log_handler = logging.FileHandler('logs.log')
-        log_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        log_handler.setLevel(logging.DEBUG)
-        log_handler.setFormatter(log_formatter)
-        logger.addHandler(log_handler)
-
         if not os.path.isfile(args.file):
             print('Invalid VIN file.')
             exit(1)
         else:
+
+            # Since all the responses will be printed on the screen,
+            # we only log the process if there's an input order file given,
+            # no sense to log only one query.
+            logger = logging.getLogger('COTUS Checker')
+            logger.setLevel(logging.DEBUG)
+            log_handler = logging.FileHandler('logs.log')
+            log_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+            log_handler.setLevel(logging.DEBUG)
+            log_handler.setFormatter(log_formatter)
+            logger.addHandler(log_handler)
+
+            # create queues for passing data between threads
             q_in = Queue()
             q_out = Queue()
             q_count = Queue()
+
+            # Create 10 threads, don't want to stress the server too much, it's not a DDoS.
             threads = [threading.Thread(target=check_order, args=(q_in, q_out, q_count)) for i in range(10)]
 
+            # Fetch new orders from google sheets, and read in from the order file.
             orders = get_orders(args.file, get_data_from_sheet(args, my_dirname))
+
+            # Different order types needs different data.
+            # Just being lazy here, using existing args variable since we don't need the other parts of it.
             for o in orders:
                 if o[0] == 'vin':
                     if len(o) == 2:
@@ -782,17 +797,25 @@ def main():
                         args.vin = ''
                         args.send_email = o[3]
 
+                # Must make copy so we can have put them into different threads without messing up.
+                # The length of the order_str_list will be the index to write to it.
                 q_in.put((copy.deepcopy(args), o, len(order_str_list)))
                 order_str_list.append('')
+
+            # Start all threads and wait for them to finish.
             for t in threads:
                 t.start()
             for t in threads:
                 t.join()
+
+            # Print out all the query results.
             for s in order_str_list:
                 print(s)
 
+            # Log what we did just now.
             logger.info('Total Orders: {0}, Query Success: {1}'.format(len(orders), sum(list(q_count.queue))))
 
+            # Remove orders that are marked "Delivered" from the order file.
             if args.remove_delivered:
                 remove_list = list(q_out.queue)
                 with open(args.file, 'w') as out_file:
@@ -801,6 +824,8 @@ def main():
                             out_file.write('{0}\n'.format(','.join(orders[i])))
 
     else:
+
+        # if we're not using a order file
         data = None
         msg = ''
         stop_flag = False
