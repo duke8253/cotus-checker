@@ -87,6 +87,7 @@ def get_requests(url, payload=''):
     :return: error number (0 for success, -1 for failure) and the response of the request
     :rtype: int, requests.api
     """
+
     for i in range(GET_RETRY):
         try:
             if payload:
@@ -96,6 +97,7 @@ def get_requests(url, payload=''):
             return 0, r
         except (requests.exceptions.Timeout, requests.exceptions.ConnectionError):
             pass
+
     return -1, '{0}SERVER TIMEOUT{1}'.format(RED, RESET)
 
 
@@ -105,37 +107,54 @@ def get_window_sticker(vin, email_addr):
 
     :param vin: the vin of the car
     :type vin: str
+    :param email_addr: email address is appended to the file name to distinguish files
+    :type email_addr: str
     :return: error number and a message
     :rtype: int, str
     """
+
+    # email address is appended to the file name if there is one
     if email_addr:
         file_name = os.path.join(DIR_WINDOW_STICKER, '{0}_{1}.pdf'.format(vin, email_addr))
     else:
         file_name = os.path.join(DIR_WINDOW_STICKER, '{0}.pdf'.format(vin))
+
+    # get the hash of the old window sticker file if there is one
     hash_old = hashlib.sha256()
     sha256_old = ''
-
     if os.path.isfile(file_name):
         hash_old.update(open(file_name, 'rb').read())
         sha256_old = hash_old.hexdigest()
 
-    temp_name = os.path.join(DIR_WINDOW_STICKER, '{0}.pdf'.format(next(tempfile._get_candidate_names())))
+    # try fetching the window sticker
     payload = {'vin': vin}
     err, r = get_requests('http://www.windowsticker.forddirect.com/windowsticker.pdf', payload)
+
+    # if returned error and there is NO old window sticker, return error with the response
+    # if returned error and there IS an old window sticker, return success and say "FOUND BEFORE"
     if err:
         if not sha256_old:
             return -1, r
         else:
             return 0, '{0}FOUND BEFORE{1}'.format(YELLOW, RESET)
 
+    # get a temporary name for the new window sticker and write to it
+    temp_name = os.path.join(DIR_WINDOW_STICKER, '{0}.pdf'.format(next(tempfile._get_candidate_names())))
     open(temp_name, 'wb').write(r.content)
 
-    pdf_title = ''
+    # read the new window sticker file to and get the title of the PDF file
     with open(temp_name, 'rb') as in_file:
         pdf_reader = PyPDF2.PdfFileReader(in_file)
         pdf_title = pdf_reader.getDocumentInfo().title.lower().replace('\r', '').replace('\n', '').replace(' ', '')
 
+    # if the title of the new PDF file says "windowsticker" after removing all other characters,
+    # it means it's actually a window sticker, otherwise it's just a place holder, return "NOT FOUND"
     if pdf_title == 'windowsticker':
+
+        # check the hash of the new window sticker
+        # if it's different than the old one, then return "UPDATED"
+        # if it's the same, then return "FOUND BEFORE"
+        # if there is no old window sticker, then return "RELEASED"
         hash_new = hashlib.sha256()
         hash_new.update(r.content)
         sha256_new = hash_new.hexdigest()
@@ -155,7 +174,7 @@ def get_window_sticker(vin, email_addr):
         return -1, '{0}NOT FOUND{1}'.format(RED, RESET)
 
 
-def get_orders(file_name, new_orders=[]):
+def get_orders(file_name, new_orders=None):
     """
     Get orders from the file, combine with new orders from Google Sheet.
 
@@ -166,12 +185,25 @@ def get_orders(file_name, new_orders=[]):
     :return: a list of list of strings of the order information
     :rtype: list[list[str]]
     """
+
+    # read the order file and put it into a list
     lines = open(file_name, 'r').readlines()
 
     orders = []
+
+    # parse the order file
     for l in lines:
         o = l.replace('\n', '').replace(' ', '').split(',')
         o = list(map(str.strip, o))
+
+        # If order uses VIN, it needs to have either 2 or 3 fields (optional email address),
+        # the VIN itself must be 17 alphanumeric characters.
+        #
+        # If order uses Order Number and Dealer Code, it needs to have either 3 or 4 fields (optional email address),
+        # Order Number must be 4 alphanumeric characters, Dealer Code must be 6 alphanumeric characters.
+        #
+        # Send invalid order email if any of the condition above isn't met,
+        # the send_email_invalid_order will check for invalid email addresses
         if o[0] == 'vin':
             if (len(o) != 2 and len(o) != 3) or len(o[1]) != 17 or not o[1].isalnum():
                 info = 'VIN, {0}'.format(', '.join(o[1:]))
@@ -190,6 +222,8 @@ def get_orders(file_name, new_orders=[]):
             print(', '.join(o))
             print('Invalid Order.\n')
             continue
+
+        # Make it loop pretty then put it in the order list, also makes sure no duplicates here.
         for i in range(1, len(o) - 1):
             o[i] = o[i].upper()
         o[-1] = o[-1].lower()
@@ -197,19 +231,23 @@ def get_orders(file_name, new_orders=[]):
         if o not in orders:
             orders.append(o)
 
-    for o in new_orders:
-        if o not in orders:
-            orders.append(o)
+    # New orders comes from google sheets, so they are already formatted,
+    # just need to make sure no duplicates. Also, we print new order info to the screen.
+    if new_orders is not None:
+        for o in new_orders:
+            if o not in orders:
+                orders.append(o)
+                o = o.split(',')
+                if o[0] == 'vin':
+                    info = 'VIN, {0}'.format(', '.join(o[1:]))
+                else:
+                    info = 'Order Number & Dealer Code, {0}'.format(', '.join(o[1:]))
+                print(info)
+                print('New Order.\n')
+                send_email_new_order(info, o[-1])
 
-            o = o.split(',')
-            if o[0] == 'vin':
-                info = 'VIN, {0}'.format(', '.join(o[1:]))
-            else:
-                info = 'Order Number & Dealer Code, {0}'.format(', '.join(o[1:]))
-            print(info)
-            print('New Order.\n')
-            send_email_new_order(info, o[-1])
-
+    # Write the new orders to the order file, overwrite the old one.
+    # This will guarantee the order file has no duplicates orders.
     with open(file_name, 'w') as out_file:
         for i in range(len(orders)):
             out_file.write('{0}\n'.format(orders[i]))
@@ -220,6 +258,7 @@ def get_orders(file_name, new_orders=[]):
 
 def get_data(args, which_one='', url=COTUS_URL[0]):
     """
+    Get the data we need from COTUS.
 
     :param args:
     :type args:
