@@ -79,9 +79,16 @@ PRINT_TO_SCREEN = True
 
 
 def print_to_screen(stuff_to_print):
+    """
+    Print stuff to the screen on demand.
+
+    :param stuff_to_print: text to print
+    :type stuff_to_print: str
+    """
+
     if PRINT_TO_SCREEN:
         print(stuff_to_print)
-        
+
 
 def get_requests(url, payload=''):
     """
@@ -267,14 +274,14 @@ def get_data(args, which_one='', url=COTUS_URL[0]):
     """
     Get the data we need from COTUS.
 
-    :param args:
-    :type args:
-    :param which_one:
-    :type which_one:
-    :param url:
-    :type url:
-    :return:
-    :rtype:
+    :param args: the args from argparse
+    :type args: args
+    :param which_one: what type of order this is
+    :type which_one: str
+    :param url: url to COTUS
+    :type url: str
+    :return: the response text
+    :rtype: str
     """
     try:
         payload = {'freshLoaded': 'true'}
@@ -299,13 +306,17 @@ def get_data(args, which_one='', url=COTUS_URL[0]):
 
 def get_order_info(data):
     """
+    Search in the response data to find useful information.
 
-    :param data:
-    :type data:
-    :return:
-    :rtype:
+    :param data: data returned from COTUS.
+    :type data: str
+    :return: order_info or error number
+    :rtype: dict or int
     """
+
     try:
+
+        # Use regex to search the data and put them into a dictionary
         order_info = {
             'vehicle_name': re.search(u'class="vehicleName">(.*?)</span>', data).group(1).strip(),
             'order_date': re.search(u'class="orderDate">(.*?)</span>', data).group(1).strip(),
@@ -321,6 +332,7 @@ def get_order_info(data):
             'state_changed': False
         }
 
+        # some times the dealer name might not be available
         try:
             order_info['dealer_name'] = re.search(u'class="dealerName">(.*?)</span>', data).group(1).replace(',', '').replace('"', '').strip()
             if not order_info['dealer_name']:
@@ -328,25 +340,27 @@ def get_order_info(data):
         except AttributeError:
             order_info['dealer_name'] = 'N/A'
 
+        # format the dates
         state_dates = [d.replace('.', '/').strip() for d in re.findall(u'Completed On : </span>(.*?)</span>', data)]
         for i in range(len(state_dates)):
-            if state_dates[i][5:] == '/17':
-                state_dates[i] = state_dates[i][:6] + '2017'
-            elif state_dates[i][5:] == '/18':
-                state_dates[i] = state_dates[i][:6] + '2018'
+            state_dates[i] = '{0}20{1}'.format(state_dates[i][:6], state_dates[i][6:])
         order_info['state_dates'] = state_dates
 
+        # get vehicle summary
         temp = [each.strip() for each in re.findall(u'class="part-detail-description.*?>(.*?)</div>', data)]
         order_info['vehicle_summary'] = []
         for each in temp:
             if each not in order_info['vehicle_summary']:
                 order_info['vehicle_summary'].append(each)
 
+        # get the link to the rendered image of the car
         order_info['car_pic_link'] = re.search(u'http://build\.ford\.com/(?:(?!http://build\.ford\.com/|/EXT/4/vehicle\.png).)*?/EXT/4/vehicle\.png', data).group().strip()
 
         return order_info
+
     except KeyboardInterrupt:
         exit(2)
+
     except AttributeError:
         return -1
 
@@ -355,11 +369,13 @@ def get_car_image(order_info):
     """
     Generate a simple summary image using the order information.
 
-    :param order_info:
-    :type order_info:
-    :return:
-    :rtype:
+    :param order_info: order information
+    :type order_info: dict
+    :return: error number
+    :rtype: int
     """
+
+    # get the image from the link, then combine the image with order information and save to a new image
     err, r = get_requests(order_info['car_pic_link'])
     if not err:
         image_file_name = os.path.join(DIR_IMAGE, '{0}.png'.format(order_info['order_vin']))
