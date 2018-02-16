@@ -75,6 +75,13 @@ DIR_INFO = 'info'
 DIR_IMAGE = 'image'
 DIR_WINDOW_STICKER = 'window_sticker'
 
+PRINT_TO_SCREEN = True
+
+
+def print_to_screen(stuff_to_print):
+    if PRINT_TO_SCREEN:
+        print(stuff_to_print)
+        
 
 def get_requests(url, payload=''):
     """
@@ -207,20 +214,20 @@ def get_orders(file_name, new_orders=None):
         if o[0] == 'vin':
             if (len(o) != 2 and len(o) != 3) or len(o[1]) != 17 or not o[1].isalnum():
                 info = 'VIN, {0}'.format(', '.join(o[1:]))
-                print(info)
-                print('Invalid Order.\n')
+                print_to_screen(info)
+                print_to_screen('Invalid Order.\n')
                 send_email_invalid_order(info, o[-1])
                 continue
         elif o[0] == 'num':
             if (len(o) != 3 and len(o) != 4) or len(o[1]) != 4 or len(o[2]) != 6 or not o[1].isalnum() or not o[2].isalnum():
                 info = 'Order Number & Dealer Code, {0}'.format(', '.join(o[1:]))
-                print(info)
-                print('Invalid Order.\n')
+                print_to_screen(info)
+                print_to_screen('Invalid Order.\n')
                 send_email_invalid_order(info, o[-1])
                 continue
         else:
-            print(', '.join(o))
-            print('Invalid Order.\n')
+            print_to_screen(', '.join(o))
+            print_to_screen('Invalid Order.\n')
             continue
 
         # Make it loop pretty then put it in the order list, also makes sure no duplicates here.
@@ -242,8 +249,8 @@ def get_orders(file_name, new_orders=None):
                     info = 'VIN, {0}'.format(', '.join(o[1:]))
                 else:
                     info = 'Order Number & Dealer Code, {0}'.format(', '.join(o[1:]))
-                print(info)
-                print('New Order.\n')
+                print_to_screen(info)
+                print_to_screen('New Order.\n')
                 send_email_new_order(info, o[-1])
 
     # Write the new orders to the order file, overwrite the old one.
@@ -708,7 +715,7 @@ def main():
     :return: error number
     :rtype: int
     """
-    global order_str_list, DIR_INFO, DIR_IMAGE, DIR_WINDOW_STICKER
+    global order_str_list, DIR_INFO, DIR_IMAGE, DIR_WINDOW_STICKER, PRINT_TO_SCREEN
 
     # Get the path of the file, extract the directory path from it, and set the work directory to it.
     my_abspath = os.path.abspath(__file__)
@@ -741,11 +748,14 @@ def main():
     parser.add_argument('-w', '--window-sticker', help='obtain the window sticker', dest='window_sticker', action='store_true', default=False)
     parser.add_argument('-r', '--remove-delivered', help='remove delivered orders from the file', dest='remove_delivered', action='store_true', default=False)
     parser.add_argument('-i', '--generate-image', help='generate an image with the dates and the car on it', dest='generate_image', action='store_true', default=False)
+    parser.add_argument('-n', '--no-print', help='print stuff to the screen', dest='no_print', action='store_true', default=False)
     args = parser.parse_args()
+
+    PRINT_TO_SCREEN = not args.no_print
 
     if args.file:
         if not os.path.isfile(args.file):
-            print('Invalid VIN file.')
+            print_to_screen('Invalid VIN file.')
             exit(1)
         else:
 
@@ -810,7 +820,7 @@ def main():
 
             # Print out all the query results.
             for s in order_str_list:
-                print(s)
+                print_to_screen(s)
 
             # Log what we did just now.
             logger.info('Total Orders: {0}, Query Success: {1}'.format(len(orders), sum(list(q_count.queue))))
@@ -841,14 +851,14 @@ def main():
                 elif args.order_number and args.dealer_code and args.last_name:
                     data = get_data(args, url=url)
                 else:
-                    print('Invalid input!')
+                    print_to_screen('Invalid input!')
                     exit(1)
                 err, msg = format_order_info(data, args, url)
                 if err >= 0:
                     stop_flag = True
                 else:
                     time.sleep(COTUS_WAIT)
-        print(msg)
+        print_to_screen(msg)
 
 
 if __name__ == '__main__':
