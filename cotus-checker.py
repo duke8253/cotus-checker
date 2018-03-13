@@ -418,39 +418,48 @@ def get_car_image(order_info):
     return -1
 
 
-def format_order_info(data, args, url=COTUS_URL[0]):
+def format_order_info(data, args, url):
     """
     Format the order info data into a readable string.
 
-    :param data:
-    :type data:
-    :param url:
-    :type url:
-    :param args:
-    :type args:
-    :return:
-    :rtype:
+    :param data: the raw string data returned from get_data()
+    :type data: str
+    :param args: args parsed from argparse
+    :type args: args
+    :param url: the url used to get the data in get_data()
+    :type url: str
+    :return: error code, formatted str if there is no error or an error message
+    :rtype: int, str
     """
 
     try:
+        # Check if there is an error message in the data, if there is one
+        # then it means the data has nothing useful (invalid order or order not found).
         error_msg = re.search(u'class="top-level-error enabled">(.*?)</p>', data).group(1).strip() + '\n'
         return -1, error_msg
     except KeyboardInterrupt:
         exit(2)
     except AttributeError:
+        # If we got to here it means there is no error message in the data,
+        # so we need to parse the str and put them into useful format.
+        # COTUS might be unavailable from time to time, so even if there's
+        # no error messages, it might just because there's nothing at all.
         order_info = get_order_info(data)
         if order_info == -1:
             return -2, 'COTUS down!'
 
+        # Get the window sticker if needed.
         ws_err = -1
         ws_str = '{0}N/A{1}'.format(RED, RESET)
         if args.window_sticker:
             ws_err, ws_str = get_window_sticker(order_info['order_vin'], args.send_email)
 
+        # Send email if needed.
         email_sent = '{0}N/A{1}'.format(RED, RESET)
         if args.send_email:
             email_sent = check_state(order_info, args.send_email, ws_err, args.generate_image)
 
+        # Put the parsed data into string format so it can be printed out nicely.
         order_str = 'Order Information:\n'
         order_str += '  {0: <21}{1}{2}{3}\n'.format('Vehicle Name:', GREEN, order_info['vehicle_name'], RESET)
         order_str += '  {0: <21}{1}{2}{3}\n'.format('Ordered On:', WHITE, order_info['order_date'], RESET)
@@ -461,25 +470,32 @@ def format_order_info(data, args, url=COTUS_URL[0]):
         order_str += '  {0: <21}{1}{2}{3}\n'.format('Estimated Delivery:', CYAN, 'N/A' if not order_info['order_edd'] else order_info['order_edd'], RESET)
         order_str += '  {0: <21}{1}{2}{3}\n'.format('Current State:', RED, order_info['current_state'], RESET)
 
+        # Format the dates if there are any.
         for i in range(5):
             try:
                 order_str += '  {0: <21}{1}Completed On {2}{3}{4}\n'.format(order_states[i], PURPLE, GREEN, order_info['state_dates'][i], RESET)
             except IndexError:
                 order_str += '  {0: <21}{1}{2}{3}\n'.format(order_states[i], PURPLE, 'N/A', RESET)
 
+        # Where we got the information.
         order_str += '  {0: <21}{1}{2}{3}\n'.format('Source:', YELLOW, url, RESET)
 
+        # What happened to the window sticker.
         if args.window_sticker:
             order_str += '  {0: <21}{1}\n'.format('Window Sticker:', ws_str)
 
+        # What happened to the email.
         if args.send_email:
             order_str += '  {0: <21}{1}\n'.format('Email Sent:', email_sent)
 
+        # Everything about the car.
         if args.vehicle_summary:
             order_str += '  Vehicle Summary:\n'
             for each in order_info['vehicle_summary']:
                 order_str += '    {0}\n'.format(each)
 
+        # Return 1 if the status say "delivered" so we can remove this order from future checks.
+        # Otherwise return 0 to say everything is fine.
         if 'delivered' in order_info['current_state'].lower():
             return 1, order_str
         else:
@@ -488,18 +504,21 @@ def format_order_info(data, args, url=COTUS_URL[0]):
 
 def check_state(cur_data, send_email, ws_err, generate_image):
     """
+    Check the previous state of the order and decide what needs to be done.
 
-    :param cur_data:
-    :type cur_data:
-    :param send_email:
-    :type send_email:
-    :param ws_err:
-    :type ws_err:
-    :param generate_image:
-    :type generate_image:
-    :return:
-    :rtype:
+    :param cur_data: the data returned from get_order_info()
+    :type cur_data: dict
+    :param send_email: email address
+    :type send_email: str
+    :param ws_err: window sticker error code
+    :type ws_err: int
+    :param generate_image: whether to generate an image
+    :type generate_image: bool
+    :return: what happened
+    :rtype: str
     """
+
+    # File names we will be using.
     file_name = os.path.join(DIR_INFO, '{0}_{1}.json'.format(cur_data['order_vin'], send_email))
     ws_name = os.path.join(DIR_WINDOW_STICKER, '{0}_{1}.pdf'.format(cur_data['order_vin'], send_email))
 
@@ -512,6 +531,7 @@ def check_state(cur_data, send_email, ws_err, generate_image):
     cur_edd = cur_data['order_edd']
     cur_state = cur_data['current_state']
 
+    # Try to read the data from previous checks if there is one.
     pre_data = None
     if os.path.isfile(file_name):
         try:
@@ -520,32 +540,47 @@ def check_state(cur_data, send_email, ws_err, generate_image):
             pre_data = None
 
     if pre_data is not None:
+        # If we found previous data it means this is not the first time,
+        # so we need to do a few compares to see what we need to do.
         pre_edd = pre_data['order_edd']
         pre_state = pre_data['current_state']
 
+        # Check if edd changed.
         if cur_edd != pre_edd:
             edd_changed = cur_data['edd_changed'] = True
 
+        # Check if the state of the order changed.
         if cur_state != pre_state:
             state_changed = cur_data['state_changed'] = True
 
+        # Check whether the email was sent successfully last time we checked.
         if not pre_data['email_sent']:
             email_sent = False
-            edd_changed = cur_data['edd_changed'] = pre_data['edd_changed']
-            state_changed = cur_data['state_changed'] = pre_data['state_changed']
 
+            # Check what changed last time and set the values accordingly.
+            if not edd_changed:
+                edd_changed = cur_data['edd_changed'] = pre_data['edd_changed']
+            if not state_changed:
+                state_changed = cur_data['state_changed'] = pre_data['state_changed']
+
+        # Check if we have a window sticker file, and if it were sent before.
         if os.path.isfile(ws_name):
             send_ws = not pre_data['window_sticker_sent']
+
+            # If the window sticker wasn't sent before, we need to send it now.
+            # We also need to send the window sticker if it was updated (ws_err == 2).
             if send_ws:
                 ws_err = 1
             elif ws_err == 2:
                 send_ws = True
 
+        # A few carry over flags.
         initial_check = not pre_data['initial_check_sent']
         cur_data['email_sent'] = pre_data['email_sent']
         cur_data['initial_check_sent'] = pre_data['initial_check_sent']
         cur_data['window_sticker_sent'] = pre_data['window_sticker_sent']
     else:
+        # If it's the first time, everything needs to be sent.
         if cur_edd:
             edd_changed = cur_data['edd_changed'] = True
 
@@ -555,13 +590,17 @@ def check_state(cur_data, send_email, ws_err, generate_image):
             send_ws = True
             ws_err = 1
 
+    # Send email if something changed, or the previous attempt failed.
     err = -1
     ret_msg = '{0}STATUS NOT CHANGED{1}'.format(YELLOW, RESET)
     if edd_changed or state_changed or send_ws or not email_sent:
+
+        # Generate the image if needed.
         img_err = -1
         if generate_image:
             img_err = get_car_image(cur_data)
 
+        # What happened to the EDD.
         if edd_changed:
             if not cur_edd:
                 edd = 'Removed'
@@ -570,6 +609,7 @@ def check_state(cur_data, send_email, ws_err, generate_image):
         else:
             edd = ''
 
+        # Send email.
         err, ret_msg = report_with_email(
             send_email,
             edd,
@@ -581,12 +621,14 @@ def check_state(cur_data, send_email, ws_err, generate_image):
             img_err
         )
 
+    # Update a few flags if everything went through.
     if not err:
         cur_data['email_sent'] = True
         cur_data['initial_check_sent'] = True
         if send_ws:
             cur_data['window_sticker_sent'] = True
 
+    # Save the new status of the order to the file, overwriting the old one.
     json.dump(cur_data, open(file_name, 'w'), indent=2)
 
     return ret_msg
@@ -594,31 +636,36 @@ def check_state(cur_data, send_email, ws_err, generate_image):
 
 def report_with_email(email_to, edd='', state='', vin='', initial_check=False, send_ws=False, ws_err=0, img_err=-1):
     """
+    Send the email.
 
-    :param email_to:
-    :type email_to:
-    :param edd:
-    :type edd:
-    :param state:
-    :type state:
-    :param vin:
-    :type vin:
-    :param initial_check:
-    :type initial_check:
-    :param send_ws:
-    :type send_ws:
-    :param ws_err:
-    :type ws_err:
-    :param img_err:
-    :type img_err:
-    :return:
-    :rtype:
+    :param email_to: the email address to send to
+    :type email_to: str
+    :param edd: the EDD of the order
+    :type edd: str
+    :param state: the current state of the order
+    :type state: str
+    :param vin: the VIN
+    :type vin: str
+    :param initial_check: whether it's the first time
+    :type initial_check: bool
+    :param send_ws: whether to send window sticker
+    :type send_ws: bool
+    :param ws_err: error code returned by get_window_sticker()
+    :type ws_err: int
+    :param img_err: error code returned by get_car_image()
+    :type img_err: int
+    :return: error code, error message
+    :rtype: int, str
     """
+
     if not gmail_user or not gmail_pswd:
+        # We need user name and password to send emails.
         return -1, '{0}Empty Gmail Username or Password{1}'.format(RED, RESET)
     else:
         email_from = gmail_user
         email_body = ''
+
+        # Format the email body, standard stuff.
         if edd:
             email_body += 'EDD: {0}\n'.format(edd)
         if state:
@@ -639,6 +686,7 @@ def report_with_email(email_to, edd='', state='', vin='', initial_check=False, s
         email_msg['Date'] = formatdate(localtime=True)
         email_msg.attach(MIMEText(email_body))
 
+        # Attach the window sticker file to the email if needed.
         if send_ws:
             attachment_name = '{0}.pdf'.format(vin)
             file_name = os.path.join(DIR_WINDOW_STICKER, '{0}_{1}.pdf'.format(vin, email_to))
@@ -646,6 +694,7 @@ def report_with_email(email_to, edd='', state='', vin='', initial_check=False, s
             attachment.add_header('Content-Disposition', 'attachment; filename="{0}"'.format(attachment_name))
             email_msg.attach(attachment)
 
+        # Attach the image file to the email if needed.
         if not img_err:
             attachment_name = '{0}.png'.format(vin)
             file_name = os.path.join(DIR_IMAGE, attachment_name)
@@ -653,6 +702,7 @@ def report_with_email(email_to, edd='', state='', vin='', initial_check=False, s
             attachment.add_header('Content-Disposition', 'attachment; filename="{0}"'.format(attachment_name))
             email_msg.attach(attachment)
 
+        # Try to send the email, return 0 on success, -1 on fail.
         try:
             gmail_server = smtplib.SMTP_SSL('smtp.gmail.com', 465)
             gmail_server.ehlo()
@@ -670,24 +720,31 @@ def report_with_email(email_to, edd='', state='', vin='', initial_check=False, s
 
 def check_order(q_in, q_out, q_count):
     """
+    Thread.
 
-    :param q_in:
-    :type q_in:
-    :param q_out:
-    :type q_out:
-    :return:
-    :rtype:
+    :param q_in: input data from the order file, and other related info
+    :type q_in: Queue
+    :param q_out: keep track of which orders needs to be removed from the order file
+    :type q_out: Queue
+    :param q_count: keep track of how many orders each thread checked successfully
+    :type q_count: Queue
     """
+
     global order_str_list
 
+    # Keep track of how many orders each thread checked successfully.
     count = 0
 
+    # Keep checking until the input queue is empty.
     while not q_in.empty():
+
+        # Get the info needed to check an order, and reset the stop flag.
         args, order, list_id = q_in.get()
         err = -1
         msg = ''
         stop_flag = False
 
+        # Keep retrying until hitting the retry limit, or until one check succeeds.
         for i in range(len(COTUS_URL)):
             if stop_flag:
                 break
@@ -695,8 +752,12 @@ def check_order(q_in, q_out, q_count):
             for j in range(COTUS_RETRY):
                 if stop_flag:
                     break
+
+                # Get the data then format it.
                 data = get_data(args, order[0], url=url)
                 err, msg = format_order_info(data, args, url)
+
+                # Stop trying if nothing went wrong.
                 if err >= 0:
                     stop_flag = True
                     count += 1
@@ -704,8 +765,10 @@ def check_order(q_in, q_out, q_count):
                     time.sleep(COTUS_WAIT)
 
         if err == 1:
+            # Put the index of the current order into the out queue so it'll be removed.
             q_out.put(list_id)
         elif err == -1:
+            # Format the error message.
             if order[0] == 'vin':
                 if len(order) == 2:
                     msg = 'VIN: {0}\n{1}'.format(order[1], msg)
@@ -717,10 +780,13 @@ def check_order(q_in, q_out, q_count):
                 else:
                     msg = 'Order Number: {0}, Dealer Code: {1}, Email: {2}\n{3}'.format(order[1], order[2], order[3], msg)
 
+        # Put the message into the global list using the index so
+        # it can be printed out in the same order of the order file.
         the_lock.acquire()
         order_str_list[list_id] = msg
         the_lock.release()
 
+    # Put the total number of orders checked by this thread in the queue.
     q_count.put(count)
 
 
