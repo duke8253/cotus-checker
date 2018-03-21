@@ -833,7 +833,6 @@ def main():
     parser.add_argument('-f', '--file', type=str, help='file with many many VIN\'s', dest='file')
     parser.add_argument('-e', '--send-email', type=str, help='send email if state changed', dest='send_email')
     parser.add_argument('-w', '--window-sticker', help='obtain the window sticker', dest='window_sticker', action='store_true', default=False)
-    parser.add_argument('-r', '--remove-delivered', help='remove delivered orders from the file', dest='remove_delivered', action='store_true', default=False)
     parser.add_argument('-i', '--generate-image', help='generate an image with the dates and the car on it', dest='generate_image', action='store_true', default=False)
     parser.add_argument('-n', '--no-print', help='print stuff to the screen', dest='no_print', action='store_true', default=False)
     args = parser.parse_args()
@@ -913,12 +912,11 @@ def main():
             logger.info('Total Orders: {0}, Query Success: {1}'.format(len(orders), sum(list(q_count.queue))))
 
             # Remove orders that are marked "Delivered" from the order file.
-            if args.remove_delivered:
-                remove_list = list(q_out.queue)
-                with open(args.file, 'w') as out_file:
-                    for i in range(len(orders)):
-                        if i not in remove_list:
-                            out_file.write('{0}\n'.format(','.join(orders[i])))
+            remove_list = list(q_out.queue)
+            with open(args.file, 'w') as out_file:
+                for i in range(len(orders)):
+                    if i not in remove_list:
+                        out_file.write('{0}\n'.format(','.join(orders[i])))
 
     else:
 
