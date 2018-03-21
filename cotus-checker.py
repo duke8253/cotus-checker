@@ -568,11 +568,16 @@ def check_state(cur_data, send_email, ws_err, generate_image):
             send_ws = not pre_data['window_sticker_sent']
 
             # If the window sticker wasn't sent before, we need to send it now.
-            # We also need to send the window sticker if it was updated (ws_err == 2).
+            # We also need to send the window sticker if it was updated (ws_err == 2), removed for now.
+            # Now we only send two copies of the window sticker, when it was first released,
+            # and when the car is delivered.
             if send_ws:
                 ws_err = 1
-            elif ws_err == 2:
+            elif 'delivered' in cur_data['current_state'].lower():
                 send_ws = True
+                ws_err = 3
+            # elif ws_err == 2:
+            #     send_ws = True
 
         # A few carry over flags.
         initial_check = not pre_data['initial_check_sent']
@@ -673,7 +678,7 @@ def report_with_email(email_to, edd='', state='', vin='', initial_check=False, s
         if send_ws:
             if ws_err == 1:
                 email_body += 'Window Sticker Released!\n'
-            else:
+            elif ws_err == 2 or ws_err == 3:
                 email_body += 'Window Sticker Updated!\n'
 
         email_msg = MIMEMultipart()
